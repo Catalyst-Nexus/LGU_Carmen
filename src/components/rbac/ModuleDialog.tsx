@@ -12,6 +12,8 @@ interface ModuleDialogProps {
   onSelectedIconChange: (value: string) => void
   filePath: string
   onFilePathChange: (value: string) => void
+  category: string
+  onCategoryChange: (value: string) => void
   isActive: boolean
   onIsActiveChange: (value: boolean) => void
   availableIcons: string[]
@@ -31,6 +33,8 @@ const ModuleDialog = ({
   onSelectedIconChange,
   filePath,
   onFilePathChange,
+  category,
+  onCategoryChange,
   isActive,
   onIsActiveChange,
   availableIcons = [],
@@ -79,7 +83,18 @@ const ModuleDialog = ({
           <li>views/rbac/ModuleManagement</li>
           <li>views/rbac/FacilitiesManagement</li>
         </ul>
-        <p className="italic">Register new components in DynamicRoutes.tsx</p>
+        <p className="italic">Register new components in Dashboard.tsx</p>
+      </div>
+      <FormInput
+        id="category"
+        label="Category"
+        placeholder="e.g., RBAC Management, Inventory, Reports"
+        value={category}
+        onChange={onCategoryChange}
+        required
+      />
+      <div className="text-xs text-muted -mt-1">
+        Category name for grouping modules in the sidebar (e.g., "RBAC Management", "Inventory")
       </div>
       <div className="flex flex-col gap-2">
         <label htmlFor="icon" className="text-sm font-medium text-foreground">

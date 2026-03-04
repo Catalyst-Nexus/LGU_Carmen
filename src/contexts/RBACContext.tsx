@@ -10,6 +10,7 @@ export interface Module {
   is_active: boolean
   created_at: string
   file_path?: string | null
+  category?: string | null
 }
 
 export interface RolePermission {

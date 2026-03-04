@@ -9,6 +9,7 @@ interface Module {
   route_path: string
   icons: string | null
   file_path: string | null
+  category: string | null
   is_active: boolean
   created_at: string
 }

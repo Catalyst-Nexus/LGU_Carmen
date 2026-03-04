@@ -11,6 +11,7 @@ interface Module {
   route_path: string
   icons: string | null
   file_path: string | null
+  category: string | null
   is_active: boolean
   created_at: string
 }
@@ -24,6 +25,7 @@ const ModuleManagement = () => {
   const [routePath, setRoutePath] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('')
   const [filePath, setFilePath] = useState('')
+  const [category, setCategory] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -56,7 +58,7 @@ const ModuleManagement = () => {
   }
 
   const handleCreate = async () => {
-    if (!moduleName.trim() || !routePath.trim() || !filePath.trim()) {
+    if (!moduleName.trim() || !routePath.trim() || !filePath.trim() || !category.trim()) {
       setError('Please fill in all required fields')
       return
     }
@@ -79,6 +81,7 @@ const ModuleManagement = () => {
             route_path: routePath.trim(),
             icons: selectedIcon || null,
             file_path: filePath.trim(),
+            category: category.trim() || null,
             is_active: isActive,
           })
           .eq('id', editingModuleId)
@@ -103,6 +106,7 @@ const ModuleManagement = () => {
             route_path: routePath.trim(),
             icons: selectedIcon || null,
             file_path: filePath.trim(),
+            category: category.trim() || null,
             is_active: isActive,
           })
           .select()
@@ -124,6 +128,7 @@ const ModuleManagement = () => {
       setRoutePath('')
       setSelectedIcon('')
       setFilePath('')
+      setCategory('')
       setIsActive(true)
       setEditingModuleId(null)
       setShowModal(false)
@@ -167,6 +172,7 @@ const ModuleManagement = () => {
     setRoutePath(module.route_path)
     setSelectedIcon(module.icons || '')
     setFilePath(module.file_path || '')
+    setCategory(module.category || '')
     setIsActive(module.is_active)
     setEditingModuleId(module.id)
     setShowModal(true)
@@ -196,6 +202,7 @@ const ModuleManagement = () => {
           setRoutePath('')
           setSelectedIcon('')
           setFilePath('')
+          setCategory('')
           setIsActive(true)
           setEditingModuleId(null)
           setError('')
@@ -230,6 +237,7 @@ const ModuleManagement = () => {
           setRoutePath('')
           setSelectedIcon('')
           setFilePath('')
+          setCategory('')
           setIsActive(true)
         }}
         onSubmit={handleCreate}
@@ -241,6 +249,8 @@ const ModuleManagement = () => {
         onSelectedIconChange={setSelectedIcon}
         filePath={filePath}
         onFilePathChange={setFilePath}
+        category={category}
+        onCategoryChange={setCategory}
         isActive={isActive}
         onIsActiveChange={setIsActive}
         availableIcons={availableIcons}

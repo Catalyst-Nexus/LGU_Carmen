@@ -7,10 +7,6 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   User,
-  ClipboardList,
-  Cog,
-  Shield,
-  Users,
   ChevronLeft,
   ChevronRight,
   LucideIcon,
@@ -37,7 +33,7 @@ const Sidebar = () => {
   // Get modules from RBAC context
   const { userModules } = useRBAC()
 
-  // Static menu sections (RBAC tabs kept static temporarily for testing)
+  // Static menu sections
   const staticSections: MenuSection[] = useMemo(() => [
     {
       title: 'MAIN',
@@ -51,40 +47,37 @@ const Sidebar = () => {
         { to: '/dashboard/profile', icon: User, label: 'User Profile' },
       ],
     },
-    {
-      title: 'RBAC MANAGEMENT',
-      items: [
-        { to: '/dashboard/rbac', icon: Shield, label: 'Roles' },
-        { to: '/dashboard/user-management', icon: Users, label: 'Users' },
-        { to: '/dashboard/dynamic', icon: Cog, label: 'Modules' },
-        { to: '/dashboard/facilities', icon: ClipboardList, label: 'Facilities' },
-      ],
-    },
   ], [])
 
-  // Build dynamic section from RBAC user modules
-  const dynamicSection: MenuSection | null = useMemo(() => {
-    if (userModules.length === 0) return null
+  // Build dynamic sections from RBAC user modules grouped by category
+  const dynamicSections: MenuSection[] = useMemo(() => {
+    if (userModules.length === 0) return []
     
-    return {
-      title: 'MODULES',
-      items: userModules.map((module) => ({
+    // Group modules by category
+    const grouped = userModules.reduce((acc, module) => {
+      const category = module.category || 'MODULES'
+      if (!acc[category]) {
+        acc[category] = []
+      }
+      acc[category].push({
         to: module.route_path,
         icon: getIconByName(module.icons),
         label: module.module_name,
-      })),
-    }
+      })
+      return acc
+    }, {} as Record<string, MenuItem[]>)
+    
+    // Convert to MenuSection array
+    return Object.entries(grouped).map(([title, items]) => ({
+      title: title.toUpperCase(),
+      items,
+    }))
   }, [userModules])
 
   // Combine static and dynamic sections
   const menuSections: MenuSection[] = useMemo(() => {
-    const sections = [...staticSections]
-    if (dynamicSection) {
-      // Insert dynamic modules section before RBAC MANAGEMENT
-      sections.splice(2, 0, dynamicSection)
-    }
-    return sections
-  }, [staticSections, dynamicSection])
+    return [...staticSections, ...dynamicSections]
+  }, [staticSections, dynamicSections])
 
   return (
     <div className="h-screen flex flex-col bg-surface">
