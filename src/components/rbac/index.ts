@@ -1,6 +1,6 @@
 // RBAC Components - Barrel Export
-export { default as AssignmentList } from "./AssignmentList";
-export { default as AssignmentDialog } from "./AssignmentDialog";
+export { default as FacilitiesList } from "./FacilitiesList";
+export { default as FacilitiesDialog } from "./FacilitiesDialog";
 export { default as ModuleList } from "./ModuleList";
 export { default as ModuleDialog } from "./ModuleDialog";
 export { default as RoleList } from "./RoleList";

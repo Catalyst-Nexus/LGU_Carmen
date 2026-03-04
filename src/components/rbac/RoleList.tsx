@@ -1,11 +1,12 @@
-import { DataTable, StatusBadge, IconButton } from '@/components/ui'
+import { DataTable, IconButton } from '@/components/ui'
 import { Pencil, Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 interface Role {
   id: string
-  description: string
-  status: 'active' | 'inactive'
-  createdAt: string
+  role_name: string
+  role_code: string
+  created_at: string
 }
 
 interface RoleListProps {
@@ -16,26 +17,30 @@ interface RoleListProps {
   onDelete: (id: string) => void
 }
 
+interface Column<T> {
+  key: keyof T | 'actions'
+  header: string
+  render?: (item: T) => ReactNode
+  className?: string
+}
+
 const RoleList = ({ roles, search, onSearchChange, onEdit, onDelete }: RoleListProps) => {
   const filteredRoles = roles.filter(
     (role) =>
       role.id.toLowerCase().includes(search.toLowerCase()) ||
-      role.description.toLowerCase().includes(search.toLowerCase())
+      role.role_name.toLowerCase().includes(search.toLowerCase()) ||
+      role.role_code.toLowerCase().includes(search.toLowerCase())
   )
 
-  const columns = [
+  const columns: Column<Role>[] = [
     { key: 'id', header: 'Role ID', render: (role: Role) => role.id },
-    { key: 'description', header: 'Description', render: (role: Role) => role.description },
+    { key: 'role_name', header: 'Role Name', render: (role: Role) => role.role_name },
+    { key: 'role_code', header: 'Role Code', render: (role: Role) => role.role_code },
     {
-      key: 'status',
-      header: 'Status',
-      render: (role: Role) => (
-        <StatusBadge status={role.status === 'active' ? 'success' : 'warning'}>
-          {role.status}
-        </StatusBadge>
-      ),
+      key: 'created_at',
+      header: 'Created At',
+      render: (role: Role) => new Date(role.created_at).toLocaleDateString(),
     },
-    { key: 'createdAt', header: 'Created At', render: (role: Role) => role.createdAt },
     {
       key: 'actions',
       header: 'Actions',
@@ -56,7 +61,6 @@ const RoleList = ({ roles, search, onSearchChange, onEdit, onDelete }: RoleListP
     <DataTable
       data={filteredRoles}
       columns={columns}
-      keyField="id"
       searchPlaceholder="Search roles..."
       searchValue={search}
       onSearchChange={onSearchChange}

@@ -57,7 +57,7 @@ const Sidebar = () => {
         { to: '/dashboard/rbac', icon: Shield, label: 'Roles' },
         { to: '/dashboard/user-management', icon: Users, label: 'Users' },
         { to: '/dashboard/dynamic', icon: Cog, label: 'Modules' },
-        { to: '/dashboard/assignment', icon: ClipboardList, label: 'Assignments' },
+        { to: '/dashboard/facilities', icon: ClipboardList, label: 'Facilities' },
       ],
     },
   ], [])

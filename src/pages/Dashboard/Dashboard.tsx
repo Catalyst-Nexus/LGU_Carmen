@@ -3,7 +3,7 @@ import Layout from '@/components/Layout/Layout'
 import UserProfile from '../UserProfile/UserProfile'
 import Settings from '../Settings/Settings'
 import RoleManagement from '@/views/rbac/RoleManagement'
-import AssignmentManagement from '@/views/rbac/AssignmentManagement'
+import FacilitiesManagement from '@/views/rbac/FacilitiesManagement'
 import ModuleManagement from '@/views/rbac/ModuleManagement'
 import UserManagement from '@/views/rbac/UserManagement'
 import UserActivation from '@/views/rbac/UserActivation'
@@ -82,7 +82,7 @@ const DashboardHome = () => {
     {
       icon: ClipboardList,
       value: '0',
-      label: 'Assignments',
+      label: 'Facilities',
       trend: '-2%',
       trendUp: false,
       color: 'purple' as const,
@@ -106,10 +106,10 @@ const DashboardHome = () => {
       color: 'green' as const,
     },
     {
-      to: '/dashboard/assignment',
+      to: '/dashboard/facilities',
       icon: ClipboardList,
-      text: 'Assignment Management',
-      description: 'Manage user assignments',
+      text: 'Facilities Management',
+      description: 'Manage facilities',
       color: 'purple' as const,
     },
     {
@@ -338,7 +338,7 @@ const Dashboard = () => {
         <Route path="/profile" element={<UserProfile />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/rbac" element={<RoleManagement />} />
-        <Route path="/assignment" element={<AssignmentManagement />} />
+        <Route path="/facilities" element={<FacilitiesManagement />} />
         <Route path="/dynamic" element={<ModuleManagement />} />
         <Route path="/user-management" element={<UserManagement />} />
         <Route path="/user-activation" element={<UserActivation />} />
