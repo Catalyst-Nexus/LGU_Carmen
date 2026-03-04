@@ -1,0 +1,138 @@
+.ml-table-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ml-card-header {
+  margin-bottom: 16px;
+}
+
+.ml-card-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.ml-search-row {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.ml-search-wrap {
+  position: relative;
+  width: 260px;
+}
+
+.ml-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+}
+
+.ml-search-input {
+  width: 100%;
+  padding: 8px 10px 8px 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: #ffffff;
+  color: #111827;
+  transition: border-color 0.2s ease;
+}
+
+.ml-search-input:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.ml-table-wrap {
+  overflow-x: auto;
+}
+
+.ml-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.ml-table th {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ml-th-actions {
+  text-align: center !important;
+}
+
+.ml-table td {
+  padding: 13px 14px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.ml-tr:hover {
+  background: #f9fafb;
+}
+
+.ml-td-id {
+  font-weight: 600;
+  color: #111827;
+}
+
+.ml-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 9999px;
+}
+
+.ml-badge-active {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.ml-badge-inactive {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.ml-td-actions {
+  text-align: center;
+}
+
+.ml-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.ml-icon-btn:hover {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.ml-icon-btn + .ml-icon-btn {
+  margin-left: 4px;
+}
+
+.ml-empty-cell {
+  text-align: center;
+  color: #9ca3af;
+  padding: 24px 14px !important;
+}

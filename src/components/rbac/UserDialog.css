@@ -1,0 +1,148 @@
+.ud-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: udFadeIn 0.18s ease;
+}
+
+@keyframes udFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ud-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: udSlideUp 0.22s ease;
+}
+
+@keyframes udSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ud-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ud-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.ud-close-btn:hover {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+.ud-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ud-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ud-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.ud-input {
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #111827;
+  transition: border-color 0.2s ease;
+}
+
+.ud-input:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.ud-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.ud-btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    transform 0.12s ease;
+}
+
+.ud-btn:active {
+  transform: scale(0.97);
+}
+
+.ud-btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: none;
+}
+
+.ud-btn-cancel:hover {
+  background: #e5e7eb;
+}
+
+.ud-btn-create {
+  background: #22c55e;
+  color: #ffffff;
+  border: none;
+}
+
+.ud-btn-create:hover {
+  background: #16a34a;
+}

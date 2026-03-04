@@ -1,0 +1,175 @@
+/* Assignment List Component Styles */
+
+.al-table-card {
+  position: relative;
+  border-radius: 14px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.al-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+}
+
+.al-card-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.al-search-row {
+  padding: 0 24px 16px;
+}
+
+.al-search-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 320px;
+}
+
+.al-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.al-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 38px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.al-search-input::placeholder {
+  color: #9ca3af;
+}
+.al-search-input:focus {
+  border-color: #22c55e;
+}
+
+.al-table-wrap {
+  overflow-x: auto;
+}
+
+.al-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.al-table thead tr {
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.al-table th {
+  padding: 11px 24px;
+  text-align: left;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6b7280;
+  background-color: #f9fafb;
+  white-space: nowrap;
+}
+
+.al-th-actions {
+  text-align: right !important;
+}
+
+.al-table td {
+  padding: 14px 24px;
+  color: #374151;
+  vertical-align: middle;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.al-tr:last-child td {
+  border-bottom: none;
+}
+.al-tr:hover td {
+  background-color: #f9fafb;
+}
+
+.al-td-id {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12.5px;
+  color: #6b7280;
+  max-width: 280px;
+  word-break: break-all;
+}
+
+.al-status-badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.al-badge-active {
+  background-color: #22c55e;
+  color: #fff;
+}
+.al-badge-inactive {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+
+.al-td-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.al-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #22c55e;
+  border-radius: 7px;
+  background: transparent;
+  color: #22c55e;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    transform 0.15s;
+  margin-left: 6px;
+}
+
+.al-icon-btn:hover {
+  background-color: #22c55e;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.al-icon-btn:active {
+  transform: translateY(0);
+}
+
+.al-empty-cell {
+  text-align: center !important;
+  padding: 56px 24px !important;
+  color: #9ca3af !important;
+  font-size: 14px !important;
+}
+
+@media (max-width: 600px) {
+  .al-search-wrap {
+    width: 100%;
+  }
+}

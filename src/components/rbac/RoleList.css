@@ -1,0 +1,145 @@
+.rl-table-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rl-card-header {
+  margin-bottom: 16px;
+}
+
+.rl-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.rl-title-icon {
+  color: #22c55e;
+}
+
+.rl-search-row {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.rl-search-wrap {
+  position: relative;
+  width: 260px;
+}
+
+.rl-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+}
+
+.rl-search-input {
+  width: 100%;
+  padding: 8px 10px 8px 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: #ffffff;
+  color: #111827;
+  transition: border-color 0.2s ease;
+}
+
+.rl-search-input:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.rl-table-wrap {
+  overflow-x: auto;
+}
+
+.rl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.rl-table th {
+  background: #f9fafb;
+  color: #6b7280;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rl-th-actions {
+  text-align: center !important;
+}
+
+.rl-table td {
+  padding: 13px 14px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.rl-tr:hover {
+  background: #f9fafb;
+}
+
+.rl-td-id {
+  font-weight: 600;
+  color: #111827;
+}
+
+.rl-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 9999px;
+}
+
+.rl-badge-active {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.rl-badge-inactive {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.rl-td-actions {
+  text-align: center;
+}
+
+.rl-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+}
+
+.rl-icon-btn:hover {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.rl-icon-btn + .rl-icon-btn {
+  margin-left: 4px;
+}
+
+.rl-empty-cell {
+  text-align: center;
+  color: #9ca3af;
+  padding: 24px 14px !important;
+}
