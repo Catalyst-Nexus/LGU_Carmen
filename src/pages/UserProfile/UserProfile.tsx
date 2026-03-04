@@ -235,7 +235,7 @@ const UserProfile = () => {
                 <h2 className="modal-title">{user?.username || 'User'}</h2>
                 <p className="modal-subtitle">{user?.email || 'user@example.com'}</p>
               </div>
-              <button className="modal-close modal-close-banner" onClick={() => setShowEditModal(false)}>
+              <button type="button" className="modal-close modal-close-banner" title="Close modal" onClick={() => setShowEditModal(false)}>
                 <HiOutlineXCircle />
               </button>
             </div>
