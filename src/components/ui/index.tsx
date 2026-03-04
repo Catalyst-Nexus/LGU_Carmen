@@ -85,12 +85,14 @@ export const ActionsBar = ({ children }: ActionsBarProps) => (
 interface PrimaryButtonProps {
   onClick: () => void
   children: ReactNode
+  disabled?: boolean
 }
 
-export const PrimaryButton = ({ onClick, children }: PrimaryButtonProps) => (
+export const PrimaryButton = ({ onClick, children, disabled = false }: PrimaryButtonProps) => (
   <button
-    className="flex items-center gap-2 px-4 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 active:scale-98 transition-all"
+    className="flex items-center gap-2 px-4 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 active:scale-98 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
     onClick={onClick}
+    disabled={disabled}
   >
     {children}
   </button>
@@ -115,6 +117,7 @@ interface DataTableProps<T> {
   searchPlaceholder?: string
   title?: string
   titleIcon?: ReactNode
+  keyField?: keyof T
 }
 
 export function DataTable<T extends { id: string }>({
@@ -234,16 +237,18 @@ interface IconButtonProps {
   onClick: () => void
   title: string
   children: ReactNode
-  variant?: 'default' | 'danger'
+  variant?: 'default' | 'success' | 'danger'
 }
 
 export const IconButton = ({ onClick, title, children, variant = 'default' }: IconButtonProps) => (
   <button
     className={cn(
       'p-1.5 rounded transition-colors',
-      variant === 'default'
-        ? 'text-muted hover:text-success hover:bg-success/10'
-        : 'text-muted hover:text-danger hover:bg-danger/10'
+      variant === 'danger'
+        ? 'text-muted hover:text-danger hover:bg-danger/10'
+        : variant === 'success'
+        ? 'text-success hover:text-success hover:bg-success/10'
+        : 'text-muted hover:text-success hover:bg-success/10'
     )}
     onClick={onClick}
     title={title}

@@ -1,17 +1,27 @@
+import { useMemo } from 'react'
 import { Link, useLocation } from 'react-router'
 import { useSettingsStore } from '@/store'
+import { useRBAC } from '@/contexts/RBACContext'
+import { getIconByName } from '@/lib/iconMap'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   User,
-  ClipboardList,
-  Cog,
-  Shield,
-  Users,
-  Key,
   ChevronLeft,
   ChevronRight,
+  LucideIcon,
 } from 'lucide-react'
+
+interface MenuItem {
+  to: string
+  icon: LucideIcon
+  label: string
+}
+
+interface MenuSection {
+  title: string
+  items: MenuItem[]
+}
 
 const Sidebar = () => {
   const location = useLocation()
@@ -19,8 +29,12 @@ const Sidebar = () => {
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const compactMode = useSettingsStore((state) => state.compactMode)
   const systemLogo = useSettingsStore((state) => state.systemLogo)
+  
+  // Get modules from RBAC context
+  const { userModules } = useRBAC()
 
-  const menuSections = [
+  // Static menu sections
+  const staticSections: MenuSection[] = useMemo(() => [
     {
       title: 'MAIN',
       items: [
@@ -33,22 +47,37 @@ const Sidebar = () => {
         { to: '/dashboard/profile', icon: User, label: 'User Profile' },
       ],
     },
-    {
-      title: 'ROLE-BASED ACCESS CONTROL',
-      items: [
-        { to: '/dashboard/assignment', icon: ClipboardList, label: 'Assignment Management' },
-        { to: '/dashboard/dynamic', icon: Cog, label: 'Module Management' },
-        { to: '/dashboard/rbac', icon: Shield, label: 'Role Management' },
-        { to: '/dashboard/user-management', icon: Users, label: 'User Management' },
-      ],
-    },
-    {
-      title: 'AUTH',
-      items: [
-        { to: '/dashboard/user-activation', icon: Key, label: 'User Activation' },
-      ],
-    },
-  ]
+  ], [])
+
+  // Build dynamic sections from RBAC user modules grouped by category
+  const dynamicSections: MenuSection[] = useMemo(() => {
+    if (userModules.length === 0) return []
+    
+    // Group modules by category
+    const grouped = userModules.reduce((acc, module) => {
+      const category = module.category || 'MODULES'
+      if (!acc[category]) {
+        acc[category] = []
+      }
+      acc[category].push({
+        to: module.route_path,
+        icon: getIconByName(module.icons),
+        label: module.module_name,
+      })
+      return acc
+    }, {} as Record<string, MenuItem[]>)
+    
+    // Convert to MenuSection array
+    return Object.entries(grouped).map(([title, items]) => ({
+      title: title.toUpperCase(),
+      items,
+    }))
+  }, [userModules])
+
+  // Combine static and dynamic sections
+  const menuSections: MenuSection[] = useMemo(() => {
+    return [...staticSections, ...dynamicSections]
+  }, [staticSections, dynamicSections])
 
   return (
     <div className="h-screen flex flex-col bg-surface">
@@ -70,7 +99,7 @@ const Sidebar = () => {
           <div className="w-8 h-8 bg-primary rounded-lg shrink-0" />
         )}
         {!sidebarCollapsed && (
-          <span className="text-xl font-bold text-primary">Admin System</span>
+          <span className="text-xl font-bold text-primary">Animal Farm</span>
         )}
       </div>
 

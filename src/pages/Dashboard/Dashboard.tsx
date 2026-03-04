@@ -1,12 +1,10 @@
 import { Routes, Route, Link } from 'react-router'
+import { lazy, Suspense } from 'react'
 import Layout from '@/components/Layout/Layout'
+import { useRBAC } from '@/contexts/RBACContext'
 import UserProfile from '../UserProfile/UserProfile'
 import Settings from '../Settings/Settings'
-import RoleManagement from '@/views/rbac/RoleManagement'
-import AssignmentManagement from '@/views/rbac/AssignmentManagement'
-import ModuleManagement from '@/views/rbac/ModuleManagement'
-import UserManagement from '@/views/rbac/UserManagement'
-import UserActivation from '@/views/rbac/UserActivation'
+
 import { cn } from '@/lib/utils'
 import {
   Users,
@@ -82,7 +80,7 @@ const DashboardHome = () => {
     {
       icon: ClipboardList,
       value: '0',
-      label: 'Assignments',
+      label: 'Facilities',
       trend: '-2%',
       trendUp: false,
       color: 'purple' as const,
@@ -106,10 +104,10 @@ const DashboardHome = () => {
       color: 'green' as const,
     },
     {
-      to: '/dashboard/assignment',
+      to: '/dashboard/facilities',
       icon: ClipboardList,
-      text: 'Assignment Management',
-      description: 'Manage user assignments',
+      text: 'Facilities Management',
+      description: 'Manage facilities',
       color: 'purple' as const,
     },
     {
@@ -330,18 +328,55 @@ const DashboardHome = () => {
   )
 }
 
+// Component Registry for dynamic routes
+const componentRegistry: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
+  'views/rbac/UserActivation': lazy(() => import('@/views/rbac/UserActivation')),
+  'views/rbac/RoleManagement': lazy(() => import('@/views/rbac/RoleManagement')),
+  'views/rbac/UserManagement': lazy(() => import('@/views/rbac/UserManagement')),
+  'views/rbac/ModuleManagement': lazy(() => import('@/views/rbac/ModuleManagement')),
+  'views/rbac/FacilitiesManagement': lazy(() => import('@/views/rbac/FacilitiesManagement')),
+  // Add your custom module components here
+}
+
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-success mx-auto mb-4"></div>
+      <p className="text-muted">Loading module...</p>
+    </div>
+  </div>
+)
+
 const Dashboard = () => {
+  const { userModules } = useRBAC()
+  
+  // Get dynamic routes from modules that have valid file_path
+  const dynamicRoutes = userModules
+    .filter(module => module.file_path && module.file_path in componentRegistry)
+    .map(module => ({
+      path: module.route_path.replace(/^\/dashboard/, ''),
+      Component: componentRegistry[module.file_path!],
+    }))
+
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardHome />} />
         <Route path="/profile" element={<UserProfile />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/rbac" element={<RoleManagement />} />
-        <Route path="/assignment" element={<AssignmentManagement />} />
-        <Route path="/dynamic" element={<ModuleManagement />} />
-        <Route path="/user-management" element={<UserManagement />} />
-        <Route path="/user-activation" element={<UserActivation />} />
+        
+        {/* Dynamic routes from database modules */}
+        {dynamicRoutes.map(({ path, Component }) => (
+          <Route
+            key={path}
+            path={path}
+            element={
+              <Suspense fallback={<LoadingFallback />}>
+                <Component />
+              </Suspense>
+            }
+          />
+        ))}
       </Routes>
     </Layout>
   )

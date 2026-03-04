@@ -14,6 +14,7 @@ interface UserActivationDialogProps {
   user: PendingUser | null
   onActivate: () => void
   onReject: () => void
+  isProcessing?: boolean
 }
 
 const UserActivationDialog = ({
@@ -22,11 +23,12 @@ const UserActivationDialog = ({
   user,
   onActivate,
   onReject,
+  isProcessing = false,
 }: UserActivationDialogProps) => {
   if (!user) return null
 
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && !isProcessing && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50 z-40" />
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface border border-border rounded-xl p-6 w-full max-w-md z-50 shadow-lg">
@@ -36,8 +38,9 @@ const UserActivationDialog = ({
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
-                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-muted/10 transition-colors"
+                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-muted/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Close"
+                disabled={isProcessing}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -68,7 +71,8 @@ const UserActivationDialog = ({
             <button
               type="button"
               onClick={onReject}
-              className="px-4 py-2 rounded-lg flex items-center gap-2 border border-danger text-danger hover:bg-danger/10 transition-colors"
+              disabled={isProcessing}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 border border-danger text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <XCircle className="w-4 h-4" />
               Reject
@@ -76,10 +80,11 @@ const UserActivationDialog = ({
             <button
               type="button"
               onClick={onActivate}
-              className="px-4 py-2 rounded-lg flex items-center gap-2 bg-success text-white hover:bg-success/90 transition-colors"
+              disabled={isProcessing}
+              className="px-4 py-2 rounded-lg flex items-center gap-2 bg-success text-white hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="w-4 h-4" />
-              Activate
+              {isProcessing ? 'Processing...' : 'Activate'}
             </button>
           </div>
         </Dialog.Content>

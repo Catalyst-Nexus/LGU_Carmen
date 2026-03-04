@@ -1,6 +1,6 @@
 import { useSettingsStore } from '@/store'
 import { cn } from '@/lib/utils'
-import { uploadImage } from '@/lib/imageUpload'
+import { uploadImage } from '@/services/imageUpload'
 import { useState, useRef } from 'react'
 import {
   Search,

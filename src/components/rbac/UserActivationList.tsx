@@ -1,3 +1,4 @@
+import React from 'react'
 import { DataTable, IconButton } from '@/components/ui'
 import { Check, X } from 'lucide-react'
 
@@ -29,7 +30,7 @@ const UserActivationList = ({
       user.email.toLowerCase().includes(search.toLowerCase())
   )
 
-  const columns = [
+  const columns: Array<{ key: keyof PendingUser | 'actions'; header: string; render: (user: PendingUser) => React.ReactNode }> = [
     { key: 'name', header: 'Name', render: (user: PendingUser) => user.name },
     { key: 'email', header: 'Email', render: (user: PendingUser) => user.email },
     { key: 'requestedAt', header: 'Requested At', render: (user: PendingUser) => user.requestedAt },

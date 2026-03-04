@@ -4,8 +4,10 @@ interface RoleDialogProps {
   open: boolean
   onClose: () => void
   onSubmit: () => void
-  description: string
-  onDescriptionChange: (value: string) => void
+  roleName: string
+  onRoleNameChange: (value: string) => void
+  roleCode: string
+  onRoleCodeChange: (value: string) => void
   editMode?: boolean
 }
 
@@ -13,8 +15,10 @@ const RoleDialog = ({
   open,
   onClose,
   onSubmit,
-  description,
-  onDescriptionChange,
+  roleName,
+  onRoleNameChange,
+  roleCode,
+  onRoleCodeChange,
   editMode = false,
 }: RoleDialogProps) => {
   return (
@@ -26,11 +30,19 @@ const RoleDialog = ({
       submitLabel={editMode ? 'Save Changes' : 'Create Role'}
     >
       <FormInput
-        id="role-description"
-        label="Role Description"
-        placeholder="Enter role description"
-        value={description}
-        onChange={onDescriptionChange}
+        id="role-name"
+        label="Role Name"
+        placeholder="Enter role name"
+        value={roleName}
+        onChange={onRoleNameChange}
+        required
+      />
+      <FormInput
+        id="role-code"
+        label="Role Code"
+        placeholder="Enter role code (e.g., ADMIN, USER)"
+        value={roleCode}
+        onChange={onRoleCodeChange}
         required
       />
     </BaseDialog>
