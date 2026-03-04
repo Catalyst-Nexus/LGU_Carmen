@@ -1,226 +1,335 @@
-import { useState } from 'react'
-import './RoleManagement.css'
+import { useState } from "react";
+import "./RoleManagement.css";
+
+// ─── Magic UI: ShineBorder (inline) ──────────────────────────────────────────
+const ShineBorder = ({
+  shineColor = ["#22c55e", "#16a34a"],
+  borderWidth = 1,
+  duration = 10,
+}: {
+  shineColor?: string | string[];
+  borderWidth?: number;
+  duration?: number;
+}) => (
+  <span
+    className="rm-shine-border"
+    style={{
+      ["--border-width" as string]: `${borderWidth}px`,
+      ["--duration" as string]: `${duration}s`,
+      backgroundImage: `radial-gradient(transparent, transparent, ${
+        Array.isArray(shineColor) ? shineColor.join(",") : shineColor
+      }, transparent, transparent)`,
+    }}
+  />
+);
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Role {
-  id: number
-  name: string
-  description: string
-  permissions: string[]
-  userCount: number
+  id: string;
+  description: string;
+  status: "active" | "inactive";
+  createdAt: string;
 }
 
 const RoleManagement = () => {
-  // TODO: Replace with API call to fetch roles
-  const [roles, setRoles] = useState<Role[]>([])
+  // TODO: Replace with actual data from API
+  const [roles] = useState<Role[]>([]);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [formName, setFormName] = useState("");
+  const [formDesc, setFormDesc] = useState("");
 
-  const [showModal, setShowModal] = useState(false)
-  const [editingRole, setEditingRole] = useState<Role | null>(null)
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    permissions: [] as string[],
-  })
+  const filtered = roles.filter(
+    (r) =>
+      r.id.toLowerCase().includes(search.toLowerCase()) ||
+      r.description.toLowerCase().includes(search.toLowerCase()),
+  );
 
-  const availablePermissions = [
-    'create',
-    'read',
-    'update',
-    'delete',
-    'manage_users',
-    'manage_roles',
-    'view_reports',
-    'export_data',
-  ]
+  const total = roles.length;
+  const active = roles.filter((r) => r.status === "active").length;
+  const inactive = roles.filter((r) => r.status === "inactive").length;
 
-  const handleAddRole = () => {
-    setEditingRole(null)
-    setFormData({ name: '', description: '', permissions: [] })
-    setShowModal(true)
-  }
-
-  const handleEditRole = (role: Role) => {
-    setEditingRole(role)
-    setFormData({
-      name: role.name,
-      description: role.description,
-      permissions: role.permissions,
-    })
-    setShowModal(true)
-  }
-
-  const handleDeleteRole = (id: number) => {
-    if (window.confirm('Are you sure you want to delete this role?')) {
-      setRoles(roles.filter((role) => role.id !== id))
-    }
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (editingRole) {
-      setRoles(
-        roles.map((role) =>
-          role.id === editingRole.id
-            ? { ...role, ...formData }
-            : role
-        )
-      )
-    } else {
-      const newRole: Role = {
-        id: Math.max(...roles.map((r) => r.id), 0) + 1,
-        ...formData,
-        userCount: 0,
-      }
-      setRoles([...roles, newRole])
-    }
-
-    setShowModal(false)
-  }
-
-  const handlePermissionChange = (permission: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      permissions: prev.permissions.includes(permission)
-        ? prev.permissions.filter((p) => p !== permission)
-        : [...prev.permissions, permission],
-    }))
-  }
-
-  const getRoleBadgeClass = (roleName: string) => {
-    const name = roleName.toLowerCase()
-    if (name === 'admin') return 'badge-admin'
-    if (name === 'manager') return 'badge-manager'
-    return 'badge-user'
-  }
+  const handleCreate = () => {
+    // TODO: wire up to API
+    setFormName("");
+    setFormDesc("");
+    setShowModal(false);
+  };
 
   return (
-    <div className="rbac">
-      <div className="page-header">
-        <h1 className="page-title">Role-Based Access Control (RBAC)</h1>
-        <p className="page-description">
-          Manage roles and permissions for your system
+    <div className="rm-page">
+      {/* Page Header */}
+      <div className="rm-page-header">
+        <h1 className="rm-page-title">Role Management</h1>
+        <p className="rm-page-subtitle">
+          Manage roles in your role-based access control system
         </p>
       </div>
 
-      <div className="section">
-        <div className="section-header">
-          <h2 className="section-title">Roles Management</h2>
-          <button className="btn btn-primary" onClick={handleAddRole}>
-            + Add New Role
+      {/* Stat Cards */}
+      <div className="rm-stats-row">
+        <div className="rm-stat-card">
+          <ShineBorder />
+          <span className="rm-stat-label">Total Roles</span>
+          <span className="rm-stat-value">{total}</span>
+        </div>
+        <div className="rm-stat-card">
+          <ShineBorder shineColor={["#22c55e", "#4ade80"]} />
+          <span className="rm-stat-label">Active Roles</span>
+          <span className="rm-stat-value rm-val-green">{active}</span>
+        </div>
+        <div className="rm-stat-card">
+          <ShineBorder shineColor={["#f97316", "#fb923c"]} />
+          <span className="rm-stat-label">Inactive Roles</span>
+          <span className="rm-stat-value rm-val-orange">{inactive}</span>
+        </div>
+      </div>
+
+      {/* Main Table Card */}
+      <div className="rm-table-card">
+        <ShineBorder duration={14} />
+
+        <div className="rm-card-header">
+          <h2 className="rm-card-title">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              style={{ marginRight: 8, verticalAlign: "middle" }}
+            >
+              <path
+                d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Role Management
+          </h2>
+          <button className="rm-add-btn" onClick={() => setShowModal(true)}>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M7 1v12M1 7h12"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            Create Role
           </button>
         </div>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Role Name</th>
-              <th>Description</th>
-              <th>Permissions</th>
-              <th>Users</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((role) => (
-              <tr key={role.id}>
-                <td>
-                  <span className={`badge ${getRoleBadgeClass(role.name)}`}>
-                    {role.name}
-                  </span>
-                </td>
-                <td>{role.description}</td>
-                <td>{role.permissions.length} permissions</td>
-                <td>{role.userCount} users</td>
-                <td>
-                  <div className="table-actions">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => handleEditRole(role)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => handleDeleteRole(role.id)}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
+        <div className="rm-search-row">
+          <div className="rm-search-wrap">
+            <svg
+              className="rm-search-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="11"
+                cy="11"
+                r="8"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <path
+                d="m21 21-4.35-4.35"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            <input
+              type="text"
+              className="rm-search-input"
+              placeholder="Search roles..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="rm-table-wrap">
+          <table className="rm-table">
+            <thead>
+              <tr>
+                <th>Role ID</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th className="rm-th-actions">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="rm-empty-cell">
+                    No roles found. Click “Create Role” to get started.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((r) => (
+                  <tr key={r.id} className="rm-tr">
+                    <td className="rm-td-id">{r.id}</td>
+                    <td>{r.description}</td>
+                    <td>
+                      <span
+                        className={`rm-status-badge ${
+                          r.status === "active"
+                            ? "rm-badge-active"
+                            : "rm-badge-inactive"
+                        }`}
+                      >
+                        {r.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td>{r.createdAt}</td>
+                    <td className="rm-td-actions">
+                      <button className="rm-icon-btn" title="Edit">
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <path
+                            d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button className="rm-icon-btn" title="Delete">
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                        >
+                          <polyline
+                            points="3 6 5 6 21 6"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <path
+                            d="M10 11v6M14 11v6"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
+      {/* Create Role Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-header">
-              {editingRole ? 'Edit Role' : 'Add New Role'}
-            </h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">Role Name</label>
-                <input
-                  className="form-input"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="Enter role name"
-                  required
-                />
-              </div>
+        <div className="rm-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="rm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="rm-modal-header">
+              <h2 className="rm-modal-title">Create New Role</h2>
+              <button
+                className="rm-modal-close"
+                onClick={() => setShowModal(false)}
+                aria-label="Close"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M18 6 6 18M6 6l12 12"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
 
-              <div className="form-group">
-                <label className="form-label">Description</label>
-                <textarea
-                  className="form-textarea"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Enter role description"
-                  required
-                />
-              </div>
+            <div className="rm-modal-body">
+              <label className="rm-modal-label" htmlFor="rm-name">
+                Role Name
+              </label>
+              <input
+                id="rm-name"
+                type="text"
+                className="rm-modal-input"
+                placeholder="Enter role name..."
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+              />
 
-              <div className="form-group">
-                <label className="form-label">Permissions</label>
-                <div className="checkbox-group">
-                  {availablePermissions.map((permission) => (
-                    <label key={permission} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.permissions.includes(permission)}
-                        onChange={() => handlePermissionChange(permission)}
-                      />
-                      {permission.replace('_', ' ')}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <label className="rm-modal-label" htmlFor="rm-desc">
+                Description
+              </label>
+              <textarea
+                id="rm-desc"
+                className="rm-modal-textarea"
+                placeholder="Enter role description..."
+                value={formDesc}
+                onChange={(e) => setFormDesc(e.target.value)}
+                rows={4}
+              />
+            </div>
 
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingRole ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
+            <div className="rm-modal-footer">
+              <button
+                className="rm-modal-cancel"
+                onClick={() => setShowModal(false)}
+              >
+                Cancel
+              </button>
+              <button className="rm-modal-create" onClick={handleCreate}>
+                Create
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default RoleManagement
+export default RoleManagement;
