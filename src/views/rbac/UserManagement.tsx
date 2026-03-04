@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { UserList, UserDialog, UserFacilityAssignmentList, UserFacilityAssignmentDialog, UserRoleAssignmentList, UserRoleAssignmentDialog } from '@/components/rbac'
+import { UserList, UserDialog, UserFacilitiesList, UserFacilitiesDialog, UserRolesList, UserRolesDialog } from '@/components/rbac'
 import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton, Tabs } from '@/components/ui'
 import { Users, Plus, RefreshCw } from 'lucide-react'
 import { fetchUsers, fetchRoles, assignRoleToUser, getUserRoles, fetchFacilities, assignFacilitiesToUser, getUserFacilities, type User as DBUser, type Role, type Facility } from '@/services/rbacService'
-import RolePermissionManagement from './RolePermissionManagement'
+import RolePermissionsManagement from './RolePermissionsManagement'
 
 interface User {
   id: string
@@ -369,7 +369,7 @@ const UserManagement = () => {
             </PrimaryButton>
           </ActionsBar>
 
-          <UserFacilityAssignmentList
+          <UserFacilitiesList
             assignments={userFacilityAssignments}
             search={assignmentSearch}
             onSearchChange={setAssignmentSearch}
@@ -393,7 +393,7 @@ const UserManagement = () => {
             </PrimaryButton>
           </ActionsBar>
 
-          <UserRoleAssignmentList
+          <UserRolesList
             assignments={userRoleAssignments}
             search={roleAssignmentSearch}
             onSearchChange={setRoleAssignmentSearch}
@@ -404,7 +404,7 @@ const UserManagement = () => {
       )}
 
       {activeTab === 'access' && (
-        <RolePermissionManagement />
+        <RolePermissionsManagement />
       )}
 
       <UserDialog
@@ -424,7 +424,7 @@ const UserManagement = () => {
         editMode={!!editingUserId}
       />
 
-      <UserFacilityAssignmentDialog
+      <UserFacilitiesDialog
         open={showAssignmentModal}
         onClose={() => {
           setShowAssignmentModal(false)
@@ -447,7 +447,7 @@ const UserManagement = () => {
         onFacilityIdsChange={setSelectedFacilityIds}
       />
 
-      <UserRoleAssignmentDialog
+      <UserRolesDialog
         open={showRoleAssignmentModal}
         onClose={() => {
           setShowRoleAssignmentModal(false)
