@@ -1,30 +1,146 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ModuleList, ModuleDialog } from '@/components/rbac'
 import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton } from '@/components/ui'
 import { Blocks, Plus } from 'lucide-react'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { availableIcons } from '@/lib/iconMap'
 
 interface Module {
   id: string
-  description: string
-  status: 'active' | 'inactive'
-  createdAt: string
+  module_name: string
+  route_path: string
+  icons: string | null
+  is_active: boolean
+  created_at: string
 }
 
 const ModuleManagement = () => {
-  const [modules] = useState<Module[]>([])
+  const [modules, setModules] = useState<Module[]>([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [moduleName, setModuleName] = useState('')
+  const [routePath, setRoutePath] = useState('')
+  const [selectedIcon, setSelectedIcon] = useState('')
   const [description, setDescription] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleCreate = () => {
-    // TODO: wire up to API
-    setDescription('')
-    setShowModal(false)
+  useEffect(() => {
+    fetchModules()
+  }, [])
+
+  const fetchModules = async () => {
+    try {
+      if (!isSupabaseConfigured() || !supabase) {
+        console.log('Supabase not configured')
+        return
+      }
+
+      const { data, error: fetchError } = await supabase
+        .from('modules')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (fetchError) {
+        console.error('Fetch modules error:', fetchError)
+        return
+      }
+
+      setModules(data || [])
+    } catch (err) {
+      console.error('Error fetching modules:', err)
+    }
+  }
+
+  const handleCreate = async () => {
+    if (!moduleName.trim() || !routePath.trim()) {
+      setError('Please fill in all required fields')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
+    try {
+      if (!isSupabaseConfigured() || !supabase) {
+        setError('Supabase is not configured')
+        return
+      }
+
+      const { data, error: insertError } = await supabase
+        .from('modules')
+        .insert({
+          module_name: moduleName.trim(),
+          route_path: routePath.trim(),
+          icons: selectedIcon || null,
+          is_active: true,
+        })
+        .select()
+
+      if (insertError) {
+        console.error('Insert module error:', insertError)
+        setError(insertError.message)
+        return
+      }
+
+      // Add new module to list
+      if (data && data.length > 0) {
+        setModules([data[0], ...modules])
+      }
+
+      // Reset form and close modal
+      setModuleName('')
+      setRoutePath('')
+      setSelectedIcon('')
+      setDescription('')
+      setShowModal(false)
+      setError('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create module'
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this module?')) return
+
+    try {
+      if (!isSupabaseConfigured() || !supabase) {
+        setError('Supabase is not configured')
+        return
+      }
+
+      const { error: deleteError } = await supabase
+        .from('modules')
+        .delete()
+        .eq('id', id)
+
+      if (deleteError) {
+        setError(deleteError.message)
+        return
+      }
+
+      setModules(modules.filter(m => m.id !== id))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete module'
+      setError(message)
+    }
+  }
+
+  const handleEdit = (module: Module) => {
+    setModuleName(module.module_name)
+    setRoutePath(module.route_path)
+    setSelectedIcon(module.icons || '')
+    setDescription(module.icons || '')
+    // TODO: implement full edit functionality
+    setShowModal(true)
   }
 
   const total = modules.length
-  const active = modules.filter((m) => m.status === 'active').length
-  const inactive = modules.filter((m) => m.status === 'inactive').length
+  const active = modules.filter((m) => m.is_active).length
+  const inactive = modules.filter((m) => !m.is_active).length
 
   return (
     <div className="space-y-6">
@@ -41,26 +157,48 @@ const ModuleManagement = () => {
       </StatsRow>
 
       <ActionsBar>
-        <PrimaryButton onClick={() => setShowModal(true)}>
+        <PrimaryButton onClick={() => {
+          setModuleName('')
+          setRoutePath('')
+          setSelectedIcon('')
+          setDescription('')
+          setError('')
+          setShowModal(true)
+        }}>
           <Plus className="w-4 h-4" />
           Add Module
         </PrimaryButton>
       </ActionsBar>
 
+      {error && (
+        <div className="px-4 py-3 bg-red-100 border border-red-300 rounded-lg text-red-700">
+          {error}
+        </div>
+      )}
+
       <ModuleList
         modules={modules}
         search={search}
         onSearchChange={setSearch}
-        onEdit={(m) => console.log('Edit', m)}
-        onDelete={(id) => console.log('Delete', id)}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
       />
 
       <ModuleDialog
         open={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowModal(false)
+          setError('')
+        }}
         onSubmit={handleCreate}
-        description={description}
-        onDescriptionChange={setDescription}
+        moduleName={moduleName}
+        onModuleNameChange={setModuleName}
+        routePath={routePath}
+        onRoutePathChange={setRoutePath}
+        selectedIcon={selectedIcon}
+        onSelectedIconChange={setSelectedIcon}
+        availableIcons={availableIcons}
+        isLoading={isLoading}
       />
     </div>
   )
