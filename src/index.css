@@ -17,6 +17,103 @@
   --white: #ffffff;
 }
 
+/* Dark Mode Colors */
+:root.dark-mode {
+  --primary-black: #e5e5e5;
+  --secondary-black: #d4d4d4;
+  --light-gray: #1a1a1a;
+  --border-gray: #2d2d2d;
+  --text-gray: #9ca3af;
+  --text-dark: #f3f4f6;
+  --white: #0f0f0f;
+  --success-green: #22c55e;
+  --warning-orange: #f97316;
+  --danger-red: #ef4444;
+}
+
+/* High Contrast Mode */
+:root.high-contrast {
+  --primary-black: #000000;
+  --secondary-black: #1a1a1a;
+  --text-dark: #000000;
+  --border-gray: #000000;
+}
+
+:root.dark-mode.high-contrast {
+  --primary-black: #ffffff;
+  --secondary-black: #e5e5e5;
+  --text-dark: #ffffff;
+  --light-gray: #000000;
+  --white: #000000;
+  --border-gray: #ffffff;
+}
+
+/* Font Size Settings */
+:root.font-small {
+  font-size: 14px;
+}
+
+:root.font-medium {
+  font-size: 16px;
+}
+
+:root.font-large {
+  font-size: 18px;
+}
+
+/* Compact Mode */
+:root.compact-mode .header {
+  padding: 8px 24px;
+}
+
+:root.compact-mode .sidebar {
+  padding: 16px 8px;
+}
+
+:root.compact-mode .sidebar-menu-link {
+  padding: 8px 12px;
+}
+
+:root.compact-mode .page-header {
+  margin-bottom: 16px;
+}
+
+:root.compact-mode .settings-section,
+:root.compact-mode .profile-card {
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+:root.compact-mode .settings-item {
+  padding: 10px;
+}
+
+/* Table Density */
+:root.table-comfortable table td,
+:root.table-comfortable table th {
+  padding: 16px;
+}
+
+:root.table-standard table td,
+:root.table-standard table th {
+  padding: 12px;
+}
+
+:root.table-compact table td,
+:root.table-compact table th {
+  padding: 8px;
+}
+
+/* Reduced Motion */
+:root.reduced-motion *,
+:root.reduced-motion *::before,
+:root.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
