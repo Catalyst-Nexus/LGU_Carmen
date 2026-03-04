@@ -10,6 +10,7 @@ interface BaseDialogProps {
   onSubmit: () => void
   submitLabel?: string
   cancelLabel?: string
+  isLoading?: boolean
 }
 
 export const BaseDialog = ({
@@ -20,6 +21,7 @@ export const BaseDialog = ({
   onSubmit,
   submitLabel = 'Create',
   cancelLabel = 'Cancel',
+  isLoading = false,
 }: BaseDialogProps) => {
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -44,14 +46,15 @@ export const BaseDialog = ({
 
           {/* Footer */}
           <div className="flex justify-end gap-3 p-5 border-t border-border">
-            <Dialog.Close className="px-4 py-2.5 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-background transition-colors">
+            <Dialog.Close className="px-4 py-2.5 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-background transition-colors disabled:opacity-50" disabled={isLoading}>
               {cancelLabel}
             </Dialog.Close>
             <button
-              className="px-4 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 transition-colors"
+              className="px-4 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onSubmit}
+              disabled={isLoading}
             >
-              {submitLabel}
+              {isLoading ? 'Saving...' : submitLabel}
             </button>
           </div>
         </Dialog.Content>

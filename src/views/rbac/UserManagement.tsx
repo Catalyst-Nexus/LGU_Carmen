@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { UserList, UserDialog, UserFacilityAssignmentList, UserFacilityAssignmentDialog, UserRoleAssignmentList, UserRoleAssignmentDialog } from '@/components/rbac'
 import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton, Tabs } from '@/components/ui'
 import { Users, Plus, RefreshCw } from 'lucide-react'
-import { fetchUsers, fetchRoles, assignRoleToUser, getUserRoles, fetchFacilities, assignFacilitiesToUser, getUserFacilities, fetchUserRoleAssignments, type User as DBUser, type Role, type Facility } from '@/services/rbacService'
+import { fetchUsers, fetchRoles, assignRoleToUser, getUserRoles, fetchFacilities, assignFacilitiesToUser, getUserFacilities, type User as DBUser, type Role, type Facility } from '@/services/rbacService'
 import RolePermissionManagement from './RolePermissionManagement'
 
 interface User {
@@ -231,7 +231,7 @@ const UserManagement = () => {
     }
   }
 
-  const handleEditUserFacilities = async (userId: string, userName: string) => {
+  const handleEditUserFacilities = async (userId: string) => {
     setSelectedUserForFacilities(userId)
     
     // Fetch current user facilities
@@ -373,7 +373,7 @@ const UserManagement = () => {
             assignments={userFacilityAssignments}
             search={assignmentSearch}
             onSearchChange={setAssignmentSearch}
-            onEdit={(assignment) => handleEditUserFacilities(assignment.id, assignment.userName)}
+            onEdit={(assignment) => handleEditUserFacilities(assignment.id)}
             onDelete={(id) => console.log('Delete facility assignment', id)}
           />
         </>
