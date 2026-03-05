@@ -1,11 +1,17 @@
+import React from 'react'
 import { DataTable, StatusBadge, IconButton } from '@/components/ui'
 import { Pencil, Trash2 } from 'lucide-react'
+import { format } from 'date-fns'
 
 interface Module {
   id: string
-  description: string
-  status: 'active' | 'inactive'
-  createdAt: string
+  module_name: string
+  route_path: string
+  icons: string | null
+  file_path: string | null
+  category: string | null
+  is_active: boolean
+  created_at: string
 }
 
 interface ModuleListProps {
@@ -19,23 +25,38 @@ interface ModuleListProps {
 const ModuleList = ({ modules, search, onSearchChange, onEdit, onDelete }: ModuleListProps) => {
   const filteredModules = modules.filter(
     (module) =>
-      module.id.toLowerCase().includes(search.toLowerCase()) ||
-      module.description.toLowerCase().includes(search.toLowerCase())
+      module.module_name.toLowerCase().includes(search.toLowerCase()) ||
+      module.route_path.toLowerCase().includes(search.toLowerCase())
   )
 
-  const columns = [
-    { key: 'id', header: 'Module ID', render: (module: Module) => module.id },
-    { key: 'description', header: 'Description', render: (module: Module) => module.description },
+  const columns: Array<{ key: keyof Module | 'actions'; header: string; render: (module: Module) => React.ReactNode }> = [
+    { key: 'module_name', header: 'Module Name', render: (module: Module) => module.module_name },
+    { key: 'route_path', header: 'Route Path', render: (module: Module) => module.route_path },
     {
-      key: 'status',
+      key: 'icons',
+      header: 'Icon',
+      render: (module: Module) =>
+        module.icons ? (
+          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
+            {module.icons}
+          </span>
+        ) : (
+          <span className="text-xs text-muted">-</span>
+        ),
+    },
+    {
+      key: 'is_active',
       header: 'Status',
       render: (module: Module) => (
-        <StatusBadge status={module.status === 'active' ? 'success' : 'warning'}>
-          {module.status}
-        </StatusBadge>
+        <StatusBadge status={module.is_active ? 'active' : 'inactive'} />
       ),
     },
-    { key: 'createdAt', header: 'Created At', render: (module: Module) => module.createdAt },
+    {
+      key: 'created_at',
+      header: 'Created At',
+      render: (module: Module) =>
+        format(new Date(module.created_at), 'MMM dd, yyyy HH:mm'),
+    },
     {
       key: 'actions',
       header: 'Actions',

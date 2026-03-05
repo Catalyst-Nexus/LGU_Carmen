@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router'
 import { useAuthStore } from '@/store'
 import { cn } from '@/lib/utils'
-import { Lightbulb } from 'lucide-react'
+import { Lightbulb, AlertCircle } from 'lucide-react'
 
 const Login = () => {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -17,19 +17,20 @@ const Login = () => {
     setError('')
     setIsLoading(true)
 
-    if (!username || !password) {
-      setError('Please enter both username and password')
+    if (!email || !password) {
+      setError('Please enter both email and password')
       setIsLoading(false)
       return
     }
 
-    const success = await login(username, password)
+    const success = await login(email, password)
     setIsLoading(false)
 
     if (success) {
       navigate('/dashboard')
     } else {
-      setError('Invalid credentials')
+      // Error is already set in the store, just display a default message
+      setError('Invalid email or password. Please try again.')
     }
   }
 
@@ -47,16 +48,16 @@ const Login = () => {
       {/* Login Card */}
       <div className="relative z-10 w-full max-w-md bg-surface rounded-2xl shadow-2xl p-12">
         <h1 className="text-center text-3xl font-bold text-primary mb-2">
-          Admin System
+          Animal Farm System
         </h1>
 
         <form className="flex flex-col gap-6 mt-8" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2">
             <label
               className="text-sm font-medium text-foreground"
-              htmlFor="username"
+              htmlFor="email"
             >
-              Username
+              Email
             </label>
             <input
               className={cn(
@@ -65,12 +66,13 @@ const Login = () => {
                 'transition-all duration-200',
                 'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10'
               )}
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
               disabled={isLoading}
+              autoComplete="email"
             />
           </div>
 
@@ -94,12 +96,14 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               disabled={isLoading}
+              autoComplete="current-password"
             />
           </div>
 
           {error && (
-            <div className="px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg text-center text-sm text-danger">
-              {error}
+            <div className="px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-3 text-sm text-danger">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -122,21 +126,21 @@ const Login = () => {
         <div className="mt-6 p-4 bg-background rounded-lg border border-border">
           <div className="flex items-center gap-2 font-semibold text-sm text-primary mb-2">
             <Lightbulb className="w-4 h-4" />
-            <span>Demo Access:</span>
+            <span>Getting Started:</span>
           </div>
           <p className="text-sm text-muted leading-relaxed">
-            Enter any username and password to access the system
+            Use your Supabase account credentials to login. If you don't have an account, contact your administrator.
           </p>
         </div>
 
         <div className="mt-6 text-center">
           <p className="text-sm text-muted">
-            Don't have an account?{' '}
+            Need help?{' '}
             <Link
               to="/register"
               className="font-semibold text-primary hover:underline transition-colors"
             >
-              Create one here
+              Request an account
             </Link>
           </p>
         </div>

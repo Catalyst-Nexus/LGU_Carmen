@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router'
-import { useAuthStore } from '@/store'
+import { supabase, isSupabaseConfigured } from '@/services/supabase'
+import { createPendingUser } from '@/services/userActivationService'
 import { cn } from '@/lib/utils'
-import { Lightbulb, ArrowLeft } from 'lucide-react'
+import { Lightbulb, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react'
 
 const Register = () => {
   const [username, setUsername] = useState('')
@@ -10,13 +11,14 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
-  const login = useAuthStore((state) => state.login)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccess('')
     setIsLoading(true)
 
     // Validation
@@ -32,8 +34,8 @@ const Register = () => {
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
       setIsLoading(false)
       return
     }
@@ -46,15 +48,56 @@ const Register = () => {
       return
     }
 
-    // Simulate registration (in demo, just log them in)
-    const success = await login(username, password)
-    setIsLoading(false)
+    try {
+      if (!isSupabaseConfigured() || !supabase) {
+        setError('Supabase is not configured. Registration is not available.')
+        setIsLoading(false)
+        return
+      }
 
-    if (success) {
-      navigate('/dashboard')
-    } else {
-      setError('Registration failed. Please try again.')
+      const normalizedEmail = email.toLowerCase().trim()
+
+      // Create Supabase Auth account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: {
+            username,
+            display_name: username,
+            full_name: username,
+          },
+        },
+      })
+
+      if (authError) {
+        setError(authError.message)
+        setIsLoading(false)
+        return
+      }
+
+      if (authData.user) {
+        // Create pending user record for admin confirmation
+        const result = await createPendingUser(username, normalizedEmail)
+
+        if (!result.success) {
+          setError(result.error || 'Failed to register user for activation')
+          setIsLoading(false)
+          return
+        }
+
+        // Registration successful
+        setSuccess('Registration successful! Awaiting admin confirmation...')
+        setTimeout(() => {
+          navigate('/pending-confirmation', { state: { email: normalizedEmail } })
+        }, 2000)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An error occurred during registration'
+      setError(message)
     }
+
+    setIsLoading(false)
   }
 
   return (
@@ -82,7 +125,7 @@ const Register = () => {
           Create Account
         </h1>
         <p className="text-center text-sm text-muted mb-6">
-          Join our admin system today
+          Join the Animal Farm System
         </p>
 
         <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
@@ -106,6 +149,7 @@ const Register = () => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Choose a username"
               disabled={isLoading}
+              autoComplete="username"
             />
           </div>
 
@@ -129,6 +173,7 @@ const Register = () => {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
               disabled={isLoading}
+              autoComplete="email"
             />
           </div>
 
@@ -150,8 +195,9 @@ const Register = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Create a password"
+              placeholder="Create a password (min 8 characters)"
               disabled={isLoading}
+              autoComplete="new-password"
             />
           </div>
 
@@ -175,12 +221,21 @@ const Register = () => {
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm your password"
               disabled={isLoading}
+              autoComplete="new-password"
             />
           </div>
 
           {error && (
-            <div className="px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg text-center text-sm text-danger">
-              {error}
+            <div className="px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-3 text-sm text-danger">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {success && (
+            <div className="px-4 py-3 bg-success/10 border border-success/20 rounded-lg flex items-start gap-3 text-sm text-success">
+              <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{success}</span>
             </div>
           )}
 
@@ -203,10 +258,24 @@ const Register = () => {
         <div className="mt-6 p-4 bg-background rounded-lg border border-border">
           <div className="flex items-center gap-2 font-semibold text-sm text-primary mb-2">
             <Lightbulb className="w-4 h-4" />
-            <span>Demo System:</span>
+            <span>Requirements:</span>
           </div>
-          <p className="text-sm text-muted leading-relaxed">
-            This is a demo registration. Your account will be created automatically.
+          <ul className="text-sm text-muted leading-relaxed list-disc list-inside space-y-1">
+            <li>Email must be unique</li>
+            <li>Username must be unique</li>
+            <li>Password must be at least 8 characters</li>
+          </ul>
+        </div>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-muted">
+            Already have an account?{' '}
+            <Link
+              to="/login"
+              className="font-semibold text-primary hover:underline transition-colors"
+            >
+              Sign in here
+            </Link>
           </p>
         </div>
       </div>

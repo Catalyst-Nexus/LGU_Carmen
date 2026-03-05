@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+// Re-export auth store
+export { useAuthStore, type User, type AuthState } from './authStore'
+
 // Settings store using Zustand
 interface SettingsState {
   darkMode: boolean
@@ -47,64 +50,6 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-    }
-  )
-)
-
-// Auth store using Zustand
-interface User {
-  id: string
-  username: string
-  email: string
-  role: string
-  profilePicture?: string | null
-}
-
-interface AuthState {
-  user: User | null
-  isAuthenticated: boolean
-  login: (username: string, password: string) => Promise<boolean>
-  logout: () => void
-  updateProfilePicture: (url: string | null) => void
-  updateUser: (updates: Partial<User>) => void
-}
-
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      isAuthenticated: false,
-      login: async (username: string, password: string) => {
-        // Mock login - replace with actual API call
-        if (username && password) {
-          const mockUser: User = {
-            id: '1',
-            username: username,
-            email: `${username}@example.com`,
-            role: 'admin',
-            profilePicture: null,
-          }
-          set({ user: mockUser, isAuthenticated: true })
-          return true
-        }
-        return false
-      },
-      logout: () => {
-        set({ user: null, isAuthenticated: false })
-      },
-      updateProfilePicture: (url) => {
-        set((state) => ({
-          user: state.user ? { ...state.user, profilePicture: url } : null,
-        }))
-      },
-      updateUser: (updates) => {
-        set((state) => ({
-          user: state.user ? { ...state.user, ...updates } : null,
-        }))
-      },
-    }),
-    {
-      name: 'auth-storage',
     }
   )
 )

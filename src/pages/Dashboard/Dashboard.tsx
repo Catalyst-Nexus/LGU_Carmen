@@ -1,12 +1,64 @@
 import { Routes, Route, Link } from 'react-router'
+import { lazy, Suspense, useMemo } from 'react'
 import Layout from '@/components/Layout/Layout'
+import { useRBAC } from '@/contexts/RBACContext'
 import UserProfile from '../UserProfile/UserProfile'
 import Settings from '../Settings/Settings'
-import RoleManagement from '@/views/rbac/RoleManagement'
-import AssignmentManagement from '@/views/rbac/AssignmentManagement'
-import ModuleManagement from '@/views/rbac/ModuleManagement'
-import UserManagement from '@/views/rbac/UserManagement'
-import UserActivation from '@/views/rbac/UserActivation'
+
+// Dynamic component loader - loads any component by its file path
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-success mx-auto mb-4"></div>
+      <p className="text-muted">Loading module...</p>
+    </div>
+  </div>
+)
+
+// Build a map of all available modules using Vite's glob pattern
+// This allows truly dynamic loading without hardcoding individual imports
+const moduleMap = import.meta.glob('../../views/**/*.tsx', { eager: false, import: 'default' })
+
+const DynamicComponentLoader = ({ filePath }: { filePath: string }) => {
+  // Normalize the path (convert backslashes to forward slashes)
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  const modulePath = `../../${normalizedPath}.tsx`
+
+  // Memoize the lazy component based on filePath to ensure stable component reference
+  // This prevents React Router from losing track of component transitions
+  const Component = useMemo(() => {
+    return lazy(() =>
+      (async () => {
+        try {
+          const moduleLoader = moduleMap[modulePath]
+          if (!moduleLoader) {
+            throw new Error(`Module not found: ${modulePath}`)
+          }
+          const defaultExport = await moduleLoader()
+          return { default: defaultExport as React.ComponentType }
+        } catch (error: unknown) {
+          console.error(`Failed to load module ${normalizedPath}:`, error)
+          return {
+            default: (() => (
+              <div className="flex items-center justify-center h-96 text-red-500 flex-col gap-4">
+                <p className="text-lg font-semibold">Failed to load module</p>
+                <p className="text-sm text-muted">{normalizedPath}</p>
+                <p className="text-xs text-muted">Check that the file exists and exports a default component</p>
+              </div>
+            )) as unknown as React.ComponentType,
+          }
+        }
+      })()
+    )
+  }, [modulePath, normalizedPath])
+
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <Component />
+    </Suspense>
+  )
+}
+
 import { cn } from '@/lib/utils'
 import {
   Users,
@@ -82,7 +134,7 @@ const DashboardHome = () => {
     {
       icon: ClipboardList,
       value: '0',
-      label: 'Assignments',
+      label: 'Facilities',
       trend: '-2%',
       trendUp: false,
       color: 'purple' as const,
@@ -106,10 +158,10 @@ const DashboardHome = () => {
       color: 'green' as const,
     },
     {
-      to: '/dashboard/assignment',
+      to: '/dashboard/facilities',
       icon: ClipboardList,
-      text: 'Assignment Management',
-      description: 'Manage user assignments',
+      text: 'Facilities Management',
+      description: 'Manage facilities',
       color: 'purple' as const,
     },
     {
@@ -330,18 +382,65 @@ const DashboardHome = () => {
   )
 }
 
+// Component Registry for dynamic routes
+const componentRegistry: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
+  'views/rbac/UserActivation': lazy(() => import('@/views/rbac/UserActivation')),
+  'views/rbac/RoleManagement': lazy(() => import('@/views/rbac/RoleManagement')),
+  'views/rbac/UserManagement': lazy(() => import('@/views/rbac/UserManagement')),
+  'views/rbac/ModuleManagement': lazy(() => import('@/views/rbac/ModuleManagement')),
+  'views/rbac/FacilitiesManagement': lazy(() => import('@/views/rbac/FacilitiesManagement')),
+  // Legacy static registry - for RBAC modules only
+  // Animal modules and new modules are loaded dynamically via file path
+}
+
 const Dashboard = () => {
+  const { userModules } = useRBAC()
+  
+  // Get dynamic routes from all modules
+  const dynamicRoutes = userModules.map(module => {
+    const basePath = module.route_path.replace(/^\/dashboard/, '')
+    const normalizedPath = module.file_path?.replace(/\\/g, '/') || ''
+    
+    // Check if this is a legacy RBAC module in the registry
+    const isLegacyModule = normalizedPath in componentRegistry
+    
+    return {
+      path: basePath,
+      type: isLegacyModule ? ('registry' as const) : ('dynamic' as const),
+      filePath: module.file_path,
+      registryKey: normalizedPath,
+    }
+  })
+
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardHome />} />
         <Route path="/profile" element={<UserProfile />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/rbac" element={<RoleManagement />} />
-        <Route path="/assignment" element={<AssignmentManagement />} />
-        <Route path="/dynamic" element={<ModuleManagement />} />
-        <Route path="/user-management" element={<UserManagement />} />
-        <Route path="/user-activation" element={<UserActivation />} />
+        
+        {/* Dynamic routes from database modules */}
+        {dynamicRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={
+              route.type === 'registry' ? (
+                // Legacy module from registry
+                <Suspense fallback={<LoadingFallback />}>
+                  {(() => {
+                    const Component = componentRegistry[route.registryKey]
+                    return <Component />
+                  })()}
+                </Suspense>
+              ) : (
+                // New dynamic module loaded from file path
+                // Use filePath as key to force remount when route changes
+                <DynamicComponentLoader key={route.filePath} filePath={route.filePath || ''} />
+              )
+            }
+          />
+        ))}
       </Routes>
     </Layout>
   )
