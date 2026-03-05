@@ -38,6 +38,14 @@ const UserActivation = () => {
     setIsLoading(true)
     setError('')
     try {
+      // Check select permission before loading users
+      const hasPermission = await canPerform('select')
+      if (!hasPermission) {
+        setError("You don't have permission to view pending users")
+        setIsLoading(false)
+        return
+      }
+
       const users = await fetchPendingUsers()
       const formattedUsers: PendingUser[] = users.map((user: DBPendingUser) => ({
         id: user.id,
@@ -126,6 +134,25 @@ const UserActivation = () => {
     }
   }
 
+  const handleSelectUser = async (user: PendingUser) => {
+    setError('')
+    
+    try {
+      // Check select permission before allowing user to view details
+      const hasPermission = await canPerform('select')
+      if (!hasPermission) {
+        setError("You don't have permission to view user details")
+        return
+      }
+      
+      setSelectedUser(user)
+      setShowModal(true)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'An error occurred'
+      setError(message)
+    }
+  }
+
   const total = pendingUsers.length
 
   return (
@@ -162,14 +189,8 @@ const UserActivation = () => {
           users={pendingUsers}
           search={search}
           onSearchChange={setSearch}
-          onActivate={(u) => {
-            setSelectedUser(u)
-            setShowModal(true)
-          }}
-          onReject={(u) => {
-            setSelectedUser(u)
-            setShowModal(true)
-          }}
+          onActivate={(u) => handleSelectUser(u)}
+          onReject={(u) => handleSelectUser(u)}
         />
       )}
 
