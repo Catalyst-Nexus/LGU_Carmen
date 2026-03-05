@@ -1,4 +1,5 @@
 import { BaseDialog, FormInput } from '@/components/ui/dialog'
+import { getIconDisplayName } from '@/lib/iconMap'
 
 interface ModuleDialogProps {
   open: boolean
@@ -109,7 +110,7 @@ const ModuleDialog = ({
           <option value="">Select an icon</option>
           {availableIcons.map((icon) => (
             <option key={icon} value={icon}>
-              {icon.charAt(0).toUpperCase() + icon.slice(1)}
+              {getIconDisplayName(icon)}
             </option>
           ))}
         </select>
