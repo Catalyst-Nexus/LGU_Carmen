@@ -113,12 +113,27 @@ export const useAuthStore = create<AuthState>()(
               const meta = data.user.user_metadata || {}
               const role = await fetchUserRole(data.user.id)
               
+              // Fetch is_super_admin from the database function
+              let isSuperAdmin = false
+              try {
+                if (isSupabaseConfigured() && supabase) {
+                  const { data: superAdminData, error: superAdminError } = await supabase
+                    .rpc('get_current_user_super_admin')
+                  
+                  if (!superAdminError && superAdminData !== null) {
+                    isSuperAdmin = superAdminData
+                  }
+                }
+              } catch (err) {
+                console.error('Error fetching is_super_admin:', err)
+              }
+              
               const userData: User = {
                 id: data.user.id,
                 username: meta.username || meta.display_name || normalizedEmail.split('@')[0],
                 email: normalizedEmail,
                 role,
-                is_super_admin: meta.is_super_admin || false,
+                is_super_admin: isSuperAdmin,
                 profilePicture: meta.profile_picture || null,
               }
 

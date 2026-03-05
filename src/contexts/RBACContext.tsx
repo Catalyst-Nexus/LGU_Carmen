@@ -36,6 +36,7 @@ interface RBACContextType {
   userModules: Module[]
   userPermissions: RolePermission[]
   isLoading: boolean
+  isSuperAdmin: boolean
   hasModuleAccess: (moduleIdOrPath: string) => boolean
   hasPermission: (moduleIdOrPath: string, action: 'select' | 'insert' | 'update' | 'delete') => boolean
   getModulePermissions: (moduleIdOrPath: string) => ModulePermissions
@@ -50,6 +51,8 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userModules, setUserModules] = useState<Module[]>([])
   const [userPermissions, setUserPermissions] = useState<RolePermission[]>([])
   const [isLoading, setIsLoading] = useState(true)
+
+  const isSuperAdmin = user?.is_super_admin ?? false
 
   const fetchAllModules = useCallback(async () => {
     if (!isSupabaseConfigured() || !supabase) return []
@@ -139,6 +142,14 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return
       }
 
+      // Super admin has access to all modules
+      if (isSuperAdmin) {
+        setUserModules(allModules)
+        setUserPermissions([])
+        setIsLoading(false)
+        return
+      }
+
       // Fetch user permissions and accessible modules based on role permissions
       const { permissions, moduleIds } = await fetchUserPermissions()
       setUserPermissions(permissions)
@@ -151,21 +162,25 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false)
     }
-  }, [user, fetchAllModules, fetchUserPermissions])
+  }, [user, isSuperAdmin, fetchAllModules, fetchUserPermissions])
 
   // Check if user has access to a module (by id or route_path)
   const hasModuleAccess = useCallback(
     (moduleIdOrPath: string): boolean => {
+      if (isSuperAdmin) return true
+
       return userModules.some(
         (m) => m.id === moduleIdOrPath || m.route_path === moduleIdOrPath
       )
     },
-    [userModules]
+    [isSuperAdmin, userModules]
   )
 
   // Check if user has a specific permission for a module
   const hasPermission = useCallback(
     (moduleIdOrPath: string, action: 'select' | 'insert' | 'update' | 'delete'): boolean => {
+      if (isSuperAdmin) return true
+
       // Find the module by id or path
       const module = modules.find(
         (m) => m.id === moduleIdOrPath || m.route_path === moduleIdOrPath
@@ -185,12 +200,17 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       })
     },
-    [userPermissions, modules]
+    [isSuperAdmin, userPermissions, modules]
   )
 
   // Get all permissions for a specific module
   const getModulePermissions = useCallback(
     (moduleIdOrPath: string): ModulePermissions => {
+      // Super admin has all permissions
+      if (isSuperAdmin) {
+        return { canSelect: true, canInsert: true, canUpdate: true, canDelete: true }
+      }
+
       // Find the module by id or path
       const module = modules.find(
         (m) => m.id === moduleIdOrPath || m.route_path === moduleIdOrPath
@@ -211,7 +231,7 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canDelete: modulePerms.some((p) => p.can_delete),
       }
     },
-    [userPermissions, modules]
+    [isSuperAdmin, userPermissions, modules]
   )
 
   // Fetch permissions on mount and when user changes
@@ -248,6 +268,7 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userModules,
         userPermissions,
         isLoading,
+        isSuperAdmin,
         hasModuleAccess,
         hasPermission,
         getModulePermissions,
