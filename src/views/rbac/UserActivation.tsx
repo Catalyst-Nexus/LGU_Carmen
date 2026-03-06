@@ -1,159 +1,172 @@
-import { useState, useEffect } from 'react'
-import { UserActivationList, UserActivationDialog } from '@/components/rbac'
-import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton } from '@/components/ui'
-import { UserCheck, RefreshCw } from 'lucide-react'
-import { usePermissionGuard } from '@/hooks/usePermissionGuard'
-import { 
-  fetchPendingUsers, 
-  confirmPendingUser, 
+import { useState, useEffect, useCallback } from "react";
+import { UserActivationList, UserActivationDialog } from "@/components/rbac";
+import {
+  PageHeader,
+  StatsRow,
+  StatCard,
+  ActionsBar,
+  PrimaryButton,
+} from "@/components/ui";
+import { UserCheck, RefreshCw } from "lucide-react";
+import { usePermissionGuard } from "@/hooks/usePermissionGuard";
+import {
+  fetchPendingUsers,
+  confirmPendingUser,
   rejectPendingUser,
-  type PendingUser as DBPendingUser
-} from '@/services/userActivationService'
+  type PendingUser as DBPendingUser,
+} from "@/services/userActivationService";
 
 interface PendingUser {
-  id: string
-  name: string
-  email: string
-  requestedAt: string
+  id: string;
+  name: string;
+  email: string;
+  requestedAt: string;
 }
 
 const UserActivation = () => {
-  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([])
-  const [search, setSearch] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Use permission guard for permission-checked operations
-  const { canPerform } = usePermissionGuard('/dashboard/user-activation')
+  const { canPerform } = usePermissionGuard("/dashboard/user-activation");
+
+  const loadPendingUsers = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      // Check select permission before loading users
+      const hasPermission = await canPerform("select");
+      if (!hasPermission) {
+        setError("You don't have permission to view pending users");
+        setIsLoading(false);
+        return;
+      }
+
+      const users = await fetchPendingUsers();
+      const formattedUsers: PendingUser[] = users.map(
+        (user: DBPendingUser) => ({
+          id: user.id,
+          name: user.username,
+          email: user.email,
+          requestedAt: new Date(user.created_at).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }),
+      );
+      setPendingUsers(formattedUsers);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load pending users";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [canPerform]);
 
   // Fetch pending users on component mount
   useEffect(() => {
-    loadPendingUsers()
-  }, [])
-
-  const loadPendingUsers = async () => {
-    setIsLoading(true)
-    setError('')
-    try {
-      // Check select permission before loading users
-      const hasPermission = await canPerform('select')
-      if (!hasPermission) {
-        setError("You don't have permission to view pending users")
-        setIsLoading(false)
-        return
-      }
-
-      const users = await fetchPendingUsers()
-      const formattedUsers: PendingUser[] = users.map((user: DBPendingUser) => ({
-        id: user.id,
-        name: user.username,
-        email: user.email,
-        requestedAt: new Date(user.created_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      }))
-      setPendingUsers(formattedUsers)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load pending users'
-      setError(message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    loadPendingUsers();
+  }, [loadPendingUsers]);
 
   const handleActivate = async () => {
-    if (!selectedUser) return
+    if (!selectedUser) return;
 
-    setIsProcessing(true)
-    setError('')
-    
+    setIsProcessing(true);
+    setError("");
+
     try {
       // Check permission before performing action
-      const hasPermission = await canPerform('update')
+      const hasPermission = await canPerform("update");
       if (!hasPermission) {
-        setError("You don't have permission to activate users")
-        setIsProcessing(false)
-        return
+        setError("You don't have permission to activate users");
+        setIsProcessing(false);
+        return;
       }
-      
-      const result = await confirmPendingUser(selectedUser.id)
-      
+
+      const result = await confirmPendingUser(selectedUser.id);
+
       if (result.success) {
         // Remove the activated user from the list
-        setPendingUsers(pendingUsers.filter((u: PendingUser) => u.id !== selectedUser.id))
-        setShowModal(false)
-        setSelectedUser(null)
+        setPendingUsers(
+          pendingUsers.filter((u: PendingUser) => u.id !== selectedUser.id),
+        );
+        setShowModal(false);
+        setSelectedUser(null);
       } else {
-        setError(result.error || 'Failed to activate user')
+        setError(result.error || "Failed to activate user");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred'
-      setError(message)
+      const message = err instanceof Error ? err.message : "An error occurred";
+      setError(message);
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const handleReject = async () => {
-    if (!selectedUser) return
+    if (!selectedUser) return;
 
-    setIsProcessing(true)
-    setError('')
-    
+    setIsProcessing(true);
+    setError("");
+
     try {
       // Check permission before performing action
-      const hasPermission = await canPerform('delete')
+      const hasPermission = await canPerform("delete");
       if (!hasPermission) {
-        setError("You don't have permission to reject users")
-        setIsProcessing(false)
-        return
+        setError("You don't have permission to reject users");
+        setIsProcessing(false);
+        return;
       }
-      
-      const result = await rejectPendingUser(selectedUser.id)
-      
+
+      const result = await rejectPendingUser(selectedUser.id);
+
       if (result.success) {
         // Remove the rejected user from the list
-        setPendingUsers(pendingUsers.filter((u: PendingUser) => u.id !== selectedUser.id))
-        setShowModal(false)
-        setSelectedUser(null)
+        setPendingUsers(
+          pendingUsers.filter((u: PendingUser) => u.id !== selectedUser.id),
+        );
+        setShowModal(false);
+        setSelectedUser(null);
       } else {
-        setError(result.error || 'Failed to reject user')
+        setError(result.error || "Failed to reject user");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred'
-      setError(message)
+      const message = err instanceof Error ? err.message : "An error occurred";
+      setError(message);
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
   const handleSelectUser = async (user: PendingUser) => {
-    setError('')
-    
+    setError("");
+
     try {
       // Check select permission before allowing user to view details
-      const hasPermission = await canPerform('select')
+      const hasPermission = await canPerform("select");
       if (!hasPermission) {
-        setError("You don't have permission to view user details")
-        return
+        setError("You don't have permission to view user details");
+        return;
       }
-      
-      setSelectedUser(user)
-      setShowModal(true)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred'
-      setError(message)
-    }
-  }
 
-  const total = pendingUsers.length
+      setSelectedUser(user);
+      setShowModal(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred";
+      setError(message);
+    }
+  };
+
+  const total = pendingUsers.length;
 
   return (
     <div className="space-y-6">
@@ -169,7 +182,7 @@ const UserActivation = () => {
 
       <ActionsBar>
         <PrimaryButton onClick={loadPendingUsers}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           Refresh List
         </PrimaryButton>
       </ActionsBar>
@@ -197,8 +210,8 @@ const UserActivation = () => {
       <UserActivationDialog
         open={showModal}
         onClose={() => {
-          setShowModal(false)
-          setSelectedUser(null)
+          setShowModal(false);
+          setSelectedUser(null);
         }}
         user={selectedUser}
         onActivate={handleActivate}
@@ -206,7 +219,7 @@ const UserActivation = () => {
         isProcessing={isProcessing}
       />
     </div>
-  )
-}
+  );
+};
 
-export default UserActivation
+export default UserActivation;
