@@ -11,6 +11,16 @@ export interface Position {
   item_no: string;
 }
 
+export interface SalaryRate {
+  id: string;
+  description: string;
+}
+
+export interface PositionType {
+  id: string;
+  description: string;
+}
+
 export interface EmployeeFormData {
   first_name: string;
   middle_name: string;
@@ -56,6 +66,47 @@ export const fetchPositions = async (): Promise<Position[]> => {
 
   if (error) {
     console.error('Error fetching positions:', error);
+    return [];
+  }
+
+  return data || [];
+};
+
+/**
+ * Fetch all salary rates from hr.salary_rate table
+ */
+export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('hr')
+    .from('salary_rate')
+    .select('id, description')
+    .eq('is_active', true)
+    .order('description');
+
+  if (error) {
+    console.error('Error fetching salary rates:', error);
+    return [];
+  }
+
+  return data || [];
+};
+
+/**
+ * Fetch all position types from hr.pos_type table
+ */
+export const fetchPositionTypes = async (): Promise<PositionType[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('hr')
+    .from('pos_type')
+    .select('id, description')
+    .order('description');
+
+  if (error) {
+    console.error('Error fetching position types:', error);
     return [];
   }
 
@@ -128,6 +179,91 @@ export const deleteEmployee = async (
 
   if (error) {
     console.error('Error deleting employee:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+// ============================================
+// PLANTILLA POSITION MANAGEMENT
+// ============================================
+
+export interface PlantillaPositionFormData {
+  item_no: string;
+  description: string;
+  sr_id: string;
+  pt_id: string;
+  o_id: string;
+  is_filled: boolean;
+}
+
+/**
+ * Create a new position in hr.position table
+ */
+export const createPosition = async (
+  positionData: PlantillaPositionFormData
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase is not configured' };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('hr')
+    .from('position')
+    .insert([positionData]);
+
+  if (error) {
+    console.error('Error creating position:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Update an existing position in hr.position table
+ */
+export const updatePosition = async (
+  id: string,
+  positionData: Partial<PlantillaPositionFormData>
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase is not configured' };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('hr')
+    .from('position')
+    .update(positionData)
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating position:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Delete a position from hr.position table
+ */
+export const deletePosition = async (
+  id: string
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase is not configured' };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('hr')
+    .from('position')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error deleting position:', error);
     return { success: false, error: error.message };
   }
 
