@@ -1,8 +1,7 @@
 import { Routes, Route, Link } from "react-router";
 import { lazy, Suspense, useMemo } from "react";
 import Layout from "@/layouts/Layout";
-import { useRBAC } from "@/hooks/useRBAC";
-import { getIconByName } from "@/lib/iconMap";
+import { useRBAC } from "@/contexts/RBACContext";
 import UserProfile from "../UserProfile/UserProfile";
 import Settings from "../Settings/Settings";
 
@@ -81,16 +80,8 @@ import {
   Briefcase,
   CalendarOff,
   Calculator,
+  FileSpreadsheet,
 } from "lucide-react";
-
-const colorKeys = Object.keys({
-  blue: 1,
-  green: 1,
-  purple: 1,
-  orange: 1,
-  teal: 1,
-  pink: 1,
-}) as Array<keyof typeof colorClasses>;
 
 const colorClasses = {
   blue: {
@@ -126,8 +117,6 @@ const colorClasses = {
 };
 
 const DashboardHome = () => {
-  const { userModules } = useRBAC();
-
   // TODO: Replace with API calls to fetch real-time HR dashboard stats
   const stats = [
     {
@@ -164,13 +153,64 @@ const DashboardHome = () => {
     },
   ];
 
-  // Dynamic quick links — driven by the modules table via RBAC context
-  const quickLinks = userModules.map((module, index) => ({
-    to: module.route_path,
-    icon: getIconByName(module.icons ?? ""),
-    text: module.module_name,
-    color: colorKeys[index % colorKeys.length],
-  }));
+  const quickLinks = [
+    {
+      to: "/dashboard/hr-payroll",
+      icon: Users,
+      text: "HR Dashboard",
+      description: "Overview of HR & Payroll",
+      color: "blue" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/employees",
+      icon: Users,
+      text: "Employee Masterlist",
+      description: "Manage employee records",
+      color: "green" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/plantilla",
+      icon: Briefcase,
+      text: "Plantilla Positions",
+      description: "Position items & incumbents",
+      color: "purple" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/leave",
+      icon: CalendarOff,
+      text: "Leave Management",
+      description: "Leave applications & balances",
+      color: "orange" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/attendance",
+      icon: Clock,
+      text: "Attendance & DTR",
+      description: "Daily time records",
+      color: "teal" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/payroll",
+      icon: Calculator,
+      text: "Payroll Computation",
+      description: "Compute payroll & deductions",
+      color: "pink" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/register",
+      icon: FileSpreadsheet,
+      text: "Payroll Register",
+      description: "Payroll summary & history",
+      color: "blue" as const,
+    },
+    {
+      to: "/dashboard/hr-payroll/remittance",
+      icon: Activity,
+      text: "Remittance Reports",
+      description: "GSIS, PhilHealth, Pag-IBIG",
+      color: "green" as const,
+    },
+  ];
 
   const recentActivities = [
     {
@@ -324,6 +364,9 @@ const DashboardHome = () => {
                     <span className="block text-sm font-semibold text-foreground truncate">
                       {link.text}
                     </span>
+                    <span className="block text-xs text-muted truncate">
+                      {link.description}
+                    </span>
                   </div>
                   <ArrowRight className="w-5 h-5 text-muted group-hover:text-success group-hover:translate-x-1 transition-all" />
                 </Link>
@@ -383,8 +426,46 @@ const DashboardHome = () => {
   );
 };
 
+// Component Registry for dynamic routes
+const componentRegistry: Record<
+  string,
+  React.LazyExoticComponent<React.ComponentType>
+> = {
+  "modules/system-admin/pages/UserActivation": lazy(
+    () => import("@/modules/system-admin/pages/UserActivation"),
+  ),
+  "modules/system-admin/pages/RoleManagement": lazy(
+    () => import("@/modules/system-admin/pages/RoleManagement"),
+  ),
+  "modules/system-admin/pages/UserManagement": lazy(
+    () => import("@/modules/system-admin/pages/UserManagement"),
+  ),
+  "modules/system-admin/pages/ModuleManagement": lazy(
+    () => import("@/modules/system-admin/pages/ModuleManagement"),
+  ),
+  "modules/system-admin/pages/FacilitiesManagement": lazy(
+    () => import("@/modules/system-admin/pages/FacilitiesManagement"),
+  ),
+};
+
 const Dashboard = () => {
   const { userModules } = useRBAC();
+
+  // Get dynamic routes from all modules
+  const dynamicRoutes = userModules.map((module) => {
+    const basePath = module.route_path.replace(/^\/dashboard/, "");
+    const normalizedPath = module.file_path?.replace(/\\/g, "/") || "";
+
+    // Check if this is a legacy RBAC module in the registry
+    const isLegacyModule = normalizedPath in componentRegistry;
+
+    return {
+      path: basePath,
+      type: isLegacyModule ? ("registry" as const) : ("dynamic" as const),
+      filePath: module.file_path,
+      registryKey: normalizedPath,
+    };
+  });
 
   return (
     <Layout>
@@ -393,19 +474,28 @@ const Dashboard = () => {
         <Route path="/profile" element={<UserProfile />} />
         <Route path="/settings" element={<Settings />} />
 
-        {/* Fully dynamic routes — driven entirely by the modules table in the DB.
-            To add a new module: add a row to the modules table with the correct
-            file_path (e.g. modules/hr-payroll/pages/MyNewPage) and route_path.
-            No code changes needed. */}
-        {userModules.map((module) => (
+        {/* Dynamic routes from database modules */}
+        {dynamicRoutes.map((route) => (
           <Route
-            key={module.route_path}
-            path={module.route_path.replace(/^\/dashboard/, "")}
+            key={route.path}
+            path={route.path}
             element={
-              <DynamicComponentLoader
-                key={module.file_path}
-                filePath={module.file_path || ""}
-              />
+              route.type === "registry" ? (
+                // Legacy module from registry
+                <Suspense fallback={<LoadingFallback />}>
+                  {(() => {
+                    const Component = componentRegistry[route.registryKey];
+                    return <Component />;
+                  })()}
+                </Suspense>
+              ) : (
+                // New dynamic module loaded from file path
+                // Use filePath as key to force remount when route changes
+                <DynamicComponentLoader
+                  key={route.filePath}
+                  filePath={route.filePath || ""}
+                />
+              )
             }
           />
         ))}

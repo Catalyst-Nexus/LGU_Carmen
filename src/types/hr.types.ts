@@ -1,16 +1,16 @@
 export interface Employee {
   id: string;
-  /** Maps to hr.position.item_no */
   employee_number: string;
   first_name: string;
   last_name: string;
   middle_name: string;
   position_id: string;
-  /** Maps to hr.position.description */
   position_title: string;
   office_id: string;
-  /** Maps to hr.office.description */
   office_name: string;
+  salary_grade: number;
+  step: number;
+  monthly_salary: number;
   employment_status:
     | "permanent"
     | "casual"
@@ -20,8 +20,6 @@ export interface Employee {
   date_hired: string;
   is_active: boolean;
   created_at: string;
-  /** auth.users.id — null when no system account has been linked */
-  user_id: string | null;
 }
 
 export interface PlantillaPosition {

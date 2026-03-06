@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
 
 // Stat Card Component
 interface StatCardProps {
@@ -78,83 +77,6 @@ interface StatsRowProps {
 export const StatsRow = ({ children }: StatsRowProps) => (
   <div className="flex gap-5 mb-6">{children}</div>
 );
-
-// Alert Component
-type AlertVariant = "success" | "error" | "warning" | "info";
-
-interface AlertProps {
-  variant?: AlertVariant;
-  title?: string;
-  message: string;
-  onClose?: () => void;
-  className?: string;
-}
-
-const alertStyles: Record<
-  AlertVariant,
-  { wrapper: string; icon: string; iconComponent: typeof CheckCircle }
-> = {
-  success: {
-    wrapper: "bg-success/10 border-success/30 text-success",
-    icon: "text-success",
-    iconComponent: CheckCircle,
-  },
-  error: {
-    wrapper: "bg-danger/10  border-danger/30  text-danger",
-    icon: "text-danger",
-    iconComponent: AlertCircle,
-  },
-  warning: {
-    wrapper: "bg-warning/10 border-warning/30 text-warning",
-    icon: "text-warning",
-    iconComponent: AlertTriangle,
-  },
-  info: {
-    wrapper: "bg-info/10    border-info/30    text-info",
-    icon: "text-info",
-    iconComponent: Info,
-  },
-};
-
-export const Alert = ({
-  variant = "success",
-  title,
-  message,
-  onClose,
-  className,
-}: AlertProps) => {
-  const styles = alertStyles[variant];
-  const Icon = styles.iconComponent;
-  return (
-    <div
-      role="alert"
-      style={{ animation: "toast-in 0.25s ease-out forwards" }}
-      className={cn(
-        "fixed bottom-5 right-5 z-[9999] w-80 max-w-[calc(100vw-2.5rem)]",
-        "flex items-start gap-3 px-4 py-3.5 rounded-xl border shadow-xl",
-        styles.wrapper,
-        className,
-      )}
-    >
-      <Icon className={cn("w-5 h-5 mt-0.5 shrink-0", styles.icon)} />
-      <div className="flex-1 min-w-0">
-        {title && (
-          <p className="font-semibold text-sm leading-none mb-0.5">{title}</p>
-        )}
-        <p className="text-xs leading-snug opacity-90">{message}</p>
-      </div>
-      {onClose && (
-        <button
-          onClick={onClose}
-          className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
-          aria-label="Dismiss"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  );
-};
 
 // Actions Bar Component
 interface ActionsBarProps {

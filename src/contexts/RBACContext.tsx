@@ -1,4 +1,10 @@
-import React, { createContext, useState, useEffect, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
 import { useAuthStore } from "@/store";
 
@@ -31,7 +37,7 @@ export interface ModulePermissions {
   canDelete: boolean;
 }
 
-export interface RBACContextType {
+interface RBACContextType {
   modules: Module[];
   userModules: Module[];
   userPermissions: RolePermission[];
@@ -318,6 +324,22 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({
       {children}
     </RBACContext.Provider>
   );
+};
+
+export const useRBAC = (): RBACContextType => {
+  const context = useContext(RBACContext);
+  if (!context) {
+    throw new Error("useRBAC must be used within an RBACProvider");
+  }
+  return context;
+};
+
+// Custom hook for getting permissions for a specific module
+export const useModulePermissions = (
+  moduleIdOrPath: string,
+): ModulePermissions => {
+  const { getModulePermissions } = useRBAC();
+  return getModulePermissions(moduleIdOrPath);
 };
 
 export default RBACContext;
