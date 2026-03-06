@@ -1,61 +1,61 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router'
-import { supabase, isSupabaseConfigured } from '@/services/supabase'
-import { createPendingUser } from '@/services/userActivationService'
-import { cn } from '@/lib/utils'
-import { Lightbulb, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react'
+import { useState } from "react";
+import { useNavigate, Link } from "react-router";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
+import { createPendingUser } from "@/services/userActivationService";
+import { cn } from "@/lib/utils";
+import { Lightbulb, ArrowLeft, AlertCircle, CheckCircle } from "lucide-react";
 
 const Register = () => {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const navigate = useNavigate()
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
-    setIsLoading(true)
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setIsLoading(true);
 
     // Validation
     if (!username || !password || !confirmPassword || !email) {
-      setError('Please fill in all fields')
-      setIsLoading(false)
-      return
+      setError("Please fill in all fields");
+      setIsLoading(false);
+      return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setIsLoading(false)
-      return
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      setIsLoading(false)
-      return
+      setError("Password must be at least 8 characters");
+      setIsLoading(false);
+      return;
     }
 
     // Email validation (basic)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address')
-      setIsLoading(false)
-      return
+      setError("Please enter a valid email address");
+      setIsLoading(false);
+      return;
     }
 
     try {
       if (!isSupabaseConfigured() || !supabase) {
-        setError('Supabase is not configured. Registration is not available.')
-        setIsLoading(false)
-        return
+        setError("Supabase is not configured. Registration is not available.");
+        setIsLoading(false);
+        return;
       }
 
-      const normalizedEmail = email.toLowerCase().trim()
+      const normalizedEmail = email.toLowerCase().trim();
 
       // Create Supabase Auth account
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -68,46 +68,56 @@ const Register = () => {
             full_name: username,
           },
         },
-      })
+      });
 
       if (authError) {
-        setError(authError.message)
-        setIsLoading(false)
-        return
+        setError(authError.message);
+        setIsLoading(false);
+        return;
       }
 
       if (authData.user) {
         // Create pending user record for admin confirmation
-        const result = await createPendingUser(username, normalizedEmail)
+        const result = await createPendingUser(
+          username,
+          normalizedEmail,
+          authData.user.id,
+        );
 
         if (!result.success) {
-          setError(result.error || 'Failed to register user for activation')
-          setIsLoading(false)
-          return
+          setError(result.error || "Failed to register user for activation");
+          setIsLoading(false);
+          return;
         }
 
         // Registration successful
-        setSuccess('Registration successful! Awaiting admin confirmation...')
+        setSuccess("Registration successful! Awaiting admin confirmation...");
         setTimeout(() => {
-          navigate('/pending-confirmation', { state: { email: normalizedEmail } })
-        }, 2000)
+          navigate("/pending-confirmation", {
+            state: { email: normalizedEmail },
+          });
+        }, 2000);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'An error occurred during registration'
-      setError(message)
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An error occurred during registration";
+      setError(message);
     }
 
-    setIsLoading(false)
-  }
+    setIsLoading(false);
+  };
 
   return (
     <div className="relative flex items-center justify-center min-h-screen bg-primary overflow-hidden">
       {/* Background Pattern */}
-      <div 
+      <div
         className="absolute inset-0 opacity-5"
         style={{
-          backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
-          backgroundSize: '50px 50px',
+          backgroundImage:
+            "radial-gradient(circle, white 1px, transparent 1px)",
+          backgroundSize: "50px 50px",
         }}
       />
 
@@ -135,10 +145,10 @@ const Register = () => {
             </label>
             <input
               className={cn(
-                'w-full px-4 py-3.5 border border-border rounded-lg text-sm',
-                'bg-surface text-foreground placeholder:text-muted',
-                'transition-all duration-200',
-                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10'
+                "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
+                "bg-surface text-foreground placeholder:text-muted",
+                "transition-all duration-200",
+                "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
               )}
               id="username"
               type="text"
@@ -159,10 +169,10 @@ const Register = () => {
             </label>
             <input
               className={cn(
-                'w-full px-4 py-3.5 border border-border rounded-lg text-sm',
-                'bg-surface text-foreground placeholder:text-muted',
-                'transition-all duration-200',
-                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10'
+                "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
+                "bg-surface text-foreground placeholder:text-muted",
+                "transition-all duration-200",
+                "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
               )}
               id="email"
               type="email"
@@ -183,10 +193,10 @@ const Register = () => {
             </label>
             <input
               className={cn(
-                'w-full px-4 py-3.5 border border-border rounded-lg text-sm',
-                'bg-surface text-foreground placeholder:text-muted',
-                'transition-all duration-200',
-                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10'
+                "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
+                "bg-surface text-foreground placeholder:text-muted",
+                "transition-all duration-200",
+                "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
               )}
               id="password"
               type="password"
@@ -207,10 +217,10 @@ const Register = () => {
             </label>
             <input
               className={cn(
-                'w-full px-4 py-3.5 border border-border rounded-lg text-sm',
-                'bg-surface text-foreground placeholder:text-muted',
-                'transition-all duration-200',
-                'focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10'
+                "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
+                "bg-surface text-foreground placeholder:text-muted",
+                "transition-all duration-200",
+                "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
               )}
               id="confirmPassword"
               type="password"
@@ -238,17 +248,17 @@ const Register = () => {
 
           <button
             className={cn(
-              'w-full py-3.5 mt-2 rounded-lg text-base font-semibold',
-              'bg-primary text-white',
-              'transition-all duration-200',
-              'hover:bg-primary-light hover:-translate-y-0.5 hover:shadow-xl',
-              'active:translate-y-0',
-              'disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none'
+              "w-full py-3.5 mt-2 rounded-lg text-base font-semibold",
+              "bg-primary text-white",
+              "transition-all duration-200",
+              "hover:bg-primary-light hover:-translate-y-0.5 hover:shadow-xl",
+              "active:translate-y-0",
+              "disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none",
             )}
             type="submit"
             disabled={isLoading}
           >
-            {isLoading ? 'Creating Account...' : 'Create Account'}
+            {isLoading ? "Creating Account..." : "Create Account"}
           </button>
         </form>
 
@@ -266,7 +276,7 @@ const Register = () => {
 
         <div className="mt-6 text-center">
           <p className="text-sm text-muted">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <Link
               to="/login"
               className="font-semibold text-primary hover:underline transition-colors"
@@ -277,7 +287,7 @@ const Register = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Register
+export default Register;

@@ -154,42 +154,20 @@ export const assignRoleToUser = async (
   if (!supabase) return { success: false, error: "Supabase not configured" };
 
   try {
-    // Check if the assignment already exists
-    const { data: existingRole, error: checkError } = await supabase
-      .from("user_roles")
-      .select("role_id")
-      .eq("user_id", userId)
-      .eq("role_id", roleId)
-      .single();
-
-    if (checkError && checkError.code !== "PGRST116") {
-      return {
-        success: false,
-        error: `Error checking role assignment: ${checkError.message}`,
-      };
-    }
-
-    if (existingRole) {
-      return { success: true }; // Role already assigned
-    }
-
-    // First, remove any existing role assignment (assuming one role per user)
+    // Remove any existing role assignment for this user (one role per user)
     const { error: deleteError } = await supabase
       .from("user_roles")
       .delete()
-      .match({ user_id: userId });
+      .eq("user_id", userId);
 
     if (deleteError) {
       console.error("Error removing old role:", deleteError);
     }
 
     // Assign the new role
-    const { error } = await supabase.from("user_roles").insert([
-      {
-        user_id: userId,
-        role_id: roleId,
-      },
-    ]);
+    const { error } = await supabase
+      .from("user_roles")
+      .insert([{ user_id: userId, role_id: roleId }]);
 
     if (error) {
       return {
@@ -251,7 +229,7 @@ export const assignModulesToRole = async (
   try {
     // Remove all existing module assignments for this role
     const { error: deleteError } = await supabase
-      .from("role_module_access")
+      .from("role_permissions")
       .delete()
       .eq("role_id", roleId);
 
@@ -259,15 +237,19 @@ export const assignModulesToRole = async (
       console.error("Error removing old module assignments:", deleteError);
     }
 
-    // Add new module assignments
+    // Add new module assignments (default all CRUD to true)
     if (moduleIds.length > 0) {
       const assignments = moduleIds.map((moduleId) => ({
         role_id: roleId,
         module_id: moduleId,
+        can_select: true,
+        can_insert: true,
+        can_update: true,
+        can_delete: true,
       }));
 
       const { error } = await supabase
-        .from("role_module_access")
+        .from("role_permissions")
         .insert(assignments);
 
       if (error) {
@@ -290,7 +272,7 @@ export const getRoleModules = async (roleId: string): Promise<Module[]> => {
 
   try {
     const { data, error } = await supabase
-      .from("role_module_access")
+      .from("role_permissions")
       .select(
         "module_id, modules:module_id(id, module_name, route_path, icons, is_active, created_at)",
       )
@@ -324,7 +306,7 @@ export const fetchRoleModuleAssignments = async (): Promise<
 
   try {
     const { data, error } = await supabase
-      .from("role_module_access")
+      .from("role_permissions")
       .select("*")
       .order("created_at", { ascending: false });
 
