@@ -23,6 +23,7 @@ import {
   useSensors,
   DragEndEvent,
 } from "@dnd-kit/core";
+import type { SensorDescriptor, SensorOptions } from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
@@ -83,8 +84,8 @@ interface SortableSectionProps {
   sidebarCollapsed: boolean;
   compactMode: boolean;
   isEditMode: boolean;
-  location: any;
-  sensors: any;
+  location: ReturnType<typeof useLocation>;
+  sensors: SensorDescriptor<SensorOptions>[];
   onItemDragEnd: (event: DragEndEvent, sectionTitle: string) => void;
 }
 
