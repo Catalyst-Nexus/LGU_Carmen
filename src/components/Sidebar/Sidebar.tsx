@@ -34,7 +34,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 /* ── Sidebar Tooltip ──────────────────────────────────────────────── */
-const SidebarTooltip = ({ text, children }: { text?: string; children: React.ReactNode }) => {
+const SidebarTooltip = ({
+  text,
+  children,
+}: {
+  text?: string;
+  children: React.ReactNode;
+}) => {
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const ref = useRef<HTMLDivElement>(null);
@@ -54,7 +60,11 @@ const SidebarTooltip = ({ text, children }: { text?: string; children: React.Rea
       {text && visible && (
         <div
           className="fixed z-[9999] px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-lg whitespace-nowrap pointer-events-none"
-          style={{ top: pos.top, left: pos.left, transform: 'translateY(-50%)' }}
+          style={{
+            top: pos.top,
+            left: pos.left,
+            transform: "translateY(-50%)",
+          }}
         >
           <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-gray-900" />
           {text}
@@ -345,9 +355,9 @@ const Sidebar = () => {
 
         // Tooltip map for specific modules
         const tooltipMap: Record<string, string> = {
-          'Estimate Income': 'Volume 1 Section 8',
-          'General Accounting Plan': 'Volume 1 Section 5',
-          'Classification Appropriation': 'Volume 1 Section 11',
+          "Estimate Income": "Volume 1 Section 8",
+          "General Accounting Plan": "Volume 1 Section 5",
+          "Classification Appropriation": "Volume 1 Section 11",
         };
 
         acc[category].push({
@@ -454,7 +464,9 @@ const Sidebar = () => {
     const oldIndex = menuSections.findIndex(
       (section) => section.id === active.id,
     );
-    const newIndex = menuSections.findIndex((section) => section.id === over.id);
+    const newIndex = menuSections.findIndex(
+      (section) => section.id === over.id,
+    );
 
     if (oldIndex !== -1 && newIndex !== -1) {
       const newSections = arrayMove(menuSections, oldIndex, newIndex);
