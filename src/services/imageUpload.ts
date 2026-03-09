@@ -16,7 +16,7 @@ export interface UploadResult {
  */
 export const uploadImage = async (
   file: File,
-  bucket: "system_logo" | "profile_picture",
+  bucket: "system_logo" | "profile_picture" | "face_enrollments",
   path?: string,
 ): Promise<UploadResult> => {
   // Check if Supabase is configured
@@ -97,7 +97,7 @@ export const uploadImage = async (
  * @returns Success status
  */
 export const deleteImage = async (
-  bucket: "system_logo" | "profile_picture",
+  bucket: "system_logo" | "profile_picture" | "face_enrollments",
   path: string,
 ): Promise<boolean> => {
   if (!isSupabaseConfigured() || !supabase) {
