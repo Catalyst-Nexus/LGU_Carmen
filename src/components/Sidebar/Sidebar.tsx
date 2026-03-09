@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useSettingsStore } from "@/store";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -32,11 +32,43 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+/* ── Sidebar Tooltip ──────────────────────────────────────────────── */
+const SidebarTooltip = ({ text, children }: { text?: string; children: React.ReactNode }) => {
+  const [visible, setVisible] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const ref = useRef<HTMLDivElement>(null);
+
+  const show = useCallback(() => {
+    if (!text || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    setPos({ top: rect.top + rect.height / 2, left: rect.right + 8 });
+    setVisible(true);
+  }, [text]);
+
+  const hide = useCallback(() => setVisible(false), []);
+
+  return (
+    <div ref={ref} onMouseEnter={show} onMouseLeave={hide}>
+      {children}
+      {text && visible && (
+        <div
+          className="fixed z-[9999] px-3 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md shadow-lg whitespace-nowrap pointer-events-none"
+          style={{ top: pos.top, left: pos.left, transform: 'translateY(-50%)' }}
+        >
+          <div className="absolute right-full top-1/2 -translate-y-1/2 border-[5px] border-transparent border-r-gray-900" />
+          {text}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface MenuItem {
   to: string;
   icon: LucideIcon;
   label: string;
   id: string; // unique identifier for drag-and-drop
+  tooltip?: string; // optional hover tooltip text
 }
 
 interface MenuSection {
@@ -137,21 +169,22 @@ const SortableSection = ({
 
             return (
               <li key={item.id}>
-                <Link
-                  to={item.to}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-200",
-                    compactMode ? "px-3 py-2" : "px-4 py-3",
-                    sidebarCollapsed && "justify-center px-2",
-                    isActive
-                      ? "bg-success text-white"
-                      : "text-foreground hover:bg-background",
-                  )}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  <Icon className="w-5 h-5 shrink-0" />
-                  {!sidebarCollapsed && <span>{item.label}</span>}
-                </Link>
+                <SidebarTooltip text={item.tooltip}>
+                  <Link
+                    to={item.to}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-200",
+                      compactMode ? "px-3 py-2" : "px-4 py-3",
+                      sidebarCollapsed && "justify-center px-2",
+                      isActive
+                        ? "bg-success text-white"
+                        : "text-foreground hover:bg-background",
+                    )}
+                  >
+                    <Icon className="w-5 h-5 shrink-0" />
+                    {!sidebarCollapsed && <span>{item.label}</span>}
+                  </Link>
+                </SidebarTooltip>
               </li>
             );
           })}
@@ -196,38 +229,39 @@ const SortableMenuItem = ({
 
   return (
     <li ref={setNodeRef} style={style}>
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-lg text-sm font-medium transition-all duration-200",
-          compactMode ? "px-3 py-2" : "px-4 py-3",
-          sidebarCollapsed && !isEditMode && "justify-center px-2",
-          isActive
-            ? "bg-success text-white"
-            : "text-foreground hover:bg-background",
-        )}
-      >
-        {isEditMode && !sidebarCollapsed && (
-          <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing text-muted hover:text-foreground"
-            aria-label="Drag to reorder"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-        )}
-        <Link
-          to={item.to}
+      <SidebarTooltip text={item.tooltip}>
+        <div
           className={cn(
-            "flex items-center gap-3 flex-1",
-            sidebarCollapsed && !isEditMode && "justify-center",
+            "flex items-center gap-2 rounded-lg text-sm font-medium transition-all duration-200",
+            compactMode ? "px-3 py-2" : "px-4 py-3",
+            sidebarCollapsed && !isEditMode && "justify-center px-2",
+            isActive
+              ? "bg-success text-white"
+              : "text-foreground hover:bg-background",
           )}
-          title={sidebarCollapsed ? item.label : undefined}
         >
-          <Icon className="w-5 h-5 shrink-0" />
-          {!sidebarCollapsed && <span>{item.label}</span>}
-        </Link>
-      </div>
+          {isEditMode && !sidebarCollapsed && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing text-muted hover:text-foreground"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="w-4 h-4" />
+            </button>
+          )}
+          <Link
+            to={item.to}
+            className={cn(
+              "flex items-center gap-3 flex-1",
+              sidebarCollapsed && !isEditMode && "justify-center",
+            )}
+          >
+            <Icon className="w-5 h-5 shrink-0" />
+            {!sidebarCollapsed && <span>{item.label}</span>}
+          </Link>
+        </div>
+      </SidebarTooltip>
     </li>
   );
 };
@@ -307,11 +341,18 @@ const Sidebar = () => {
         if (!acc[category]) {
           acc[category] = [];
         }
+
+        // Tooltip map for specific modules
+        const tooltipMap: Record<string, string> = {
+          'Estimate Income': 'Volume 1 Section 8',
+        };
+
         acc[category].push({
           to: `/dashboard${module.route_path}`,
           icon: getIconByName(module.icons),
           label: module.module_name,
           id: `module-${module.id}`,
+          tooltip: tooltipMap[module.module_name],
         });
         return acc;
       },
