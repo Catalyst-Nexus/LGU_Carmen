@@ -15,6 +15,8 @@ interface SettingsState {
   reducedMotion: boolean
   sidebarCollapsed: boolean
   systemLogo: string | null
+  sidebarOrder: Record<string, string[]> // category -> ordered item ids
+  sidebarSectionOrder: string[] // ordered section titles
   setDarkMode: (value: boolean) => void
   setCompactMode: (value: boolean) => void
   setFontSize: (value: 'small' | 'medium' | 'large') => void
@@ -24,6 +26,9 @@ interface SettingsState {
   setReducedMotion: (value: boolean) => void
   setSidebarCollapsed: (value: boolean) => void
   setSystemLogo: (url: string | null) => void
+  setSidebarOrder: (order: Record<string, string[]>) => void
+  setSidebarSectionOrder: (order: string[]) => void
+  resetSidebarOrder: () => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -38,6 +43,8 @@ export const useSettingsStore = create<SettingsState>()(
       reducedMotion: false,
       sidebarCollapsed: false,
       systemLogo: null,
+      sidebarOrder: {},
+      sidebarSectionOrder: [],
       setDarkMode: (value) => set({ darkMode: value }),
       setCompactMode: (value) => set({ compactMode: value }),
       setFontSize: (value) => set({ fontSize: value }),
@@ -47,6 +54,9 @@ export const useSettingsStore = create<SettingsState>()(
       setReducedMotion: (value) => set({ reducedMotion: value }),
       setSidebarCollapsed: (value) => set({ sidebarCollapsed: value }),
       setSystemLogo: (url) => set({ systemLogo: url }),
+      setSidebarOrder: (order) => set({ sidebarOrder: order }),
+      setSidebarSectionOrder: (order) => set({ sidebarSectionOrder: order }),
+      resetSidebarOrder: () => set({ sidebarOrder: {}, sidebarSectionOrder: [] }),
     }),
     {
       name: 'settings-storage',
