@@ -4,6 +4,8 @@ import type {
   GeneralAccountingPlanSub,
   GeneralAccountingPlanFormData,
   GeneralAccountingPlanSubFormData,
+  GeneralAccountingPlanRequest,
+  GeneralAccountingPlanRequestFormData,
 } from '@/types/accounting.types';
 
 const getClient = () => {
@@ -117,4 +119,20 @@ export const deletePlanSub = async (id: string): Promise<boolean> => {
     .eq('id', id);
   if (error) { console.error('deletePlanSub:', error); return false; }
   return true;
+};
+
+// ─── General Accounting Plan Request ─────────────────────────────────────────
+
+export const createPlanRequest = async (
+  payload: GeneralAccountingPlanRequestFormData,
+): Promise<GeneralAccountingPlanRequest | null> => {
+  const client = getClient();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('general_accounting_plan_request')
+    .insert([payload])
+    .select()
+    .single();
+  if (error) { console.error('createPlanRequest:', error); return null; }
+  return data as GeneralAccountingPlanRequest;
 };

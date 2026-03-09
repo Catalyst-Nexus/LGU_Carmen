@@ -345,6 +345,8 @@ const Sidebar = () => {
         // Tooltip map for specific modules
         const tooltipMap: Record<string, string> = {
           'Estimate Income': 'Volume 1 Section 8',
+          'General Accounting Plan': 'Volume 1 Section 5',
+          'Classification Appropriation': 'Volume 1 Section 11',
         };
 
         acc[category].push({

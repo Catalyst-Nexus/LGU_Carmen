@@ -3,6 +3,7 @@ import { BookOpen, Plus } from 'lucide-react';
 import { PageHeader, ActionsBar, PrimaryButton } from '@/components/ui';
 import AccountingPlanList from '@/modules/Accounting/components/AccountingPlanList';
 import AccountingPlanDialog from '@/modules/Accounting/components/AccountingPlanDialog';
+import AccountingPlanRequestTab from '@/modules/Accounting/components/AccountingPlanRequestTab';
 import {
   fetchPlans,
   createPlan,
@@ -12,6 +13,7 @@ import {
   createPlanSub,
   updatePlanSub,
   deletePlanSub,
+  createPlanRequest,
 } from '@/services/accountingPlanService';
 import type {
   GeneralAccountingPlan,
@@ -19,8 +21,11 @@ import type {
   AccountType,
 } from '@/types/accounting.types';
 
+type Tab = 'plans' | 'request';
+
 const GeneralAccountingPlan = () => {
-  // ── Plan state ────────────────────────────────────────────────────────────
+  // ── Tab state ─────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<Tab>('plans');
   const [plans, setPlans] = useState<GeneralAccountingPlan[]>([]);
   const [planSearch, setPlanSearch] = useState('');
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
@@ -35,6 +40,9 @@ const GeneralAccountingPlan = () => {
   // ── Sub state ─────────────────────────────────────────────────────────────
   const [subs, setSubs] = useState<GeneralAccountingPlanSub[]>([]);
   const [subSaving, setSubSaving] = useState(false);
+
+  // ── Request state ─────────────────────────────────────────────────────────
+  const [requestLoading, setRequestLoading] = useState(false);
 
   // ── Delete state ──────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<GeneralAccountingPlan | null>(null);
@@ -156,6 +164,27 @@ const GeneralAccountingPlan = () => {
     setDeleteSubConfirmOpen(false);
   };
 
+  // ── Request handler ───────────────────────────────────────────────────────
+  const handleRequest = async (payload: {
+    accountyType: AccountType;
+    planId: string;
+    hasSub: boolean;
+    subId: string | null;
+    request: string;
+  }): Promise<boolean> => {
+    setRequestLoading(true);
+    const result = await createPlanRequest({
+      accounty_type: payload.accountyType,
+      general_accounting_plan_id: payload.planId,
+      has_sub: payload.hasSub,
+      general_accounting_plan_sub_id: payload.subId,
+      request: payload.request,
+      status: 'pending',
+    });
+    setRequestLoading(false);
+    return result !== null;
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
@@ -165,24 +194,61 @@ const GeneralAccountingPlan = () => {
         icon={<BookOpen className="w-6 h-6" />}
       />
 
-      <ActionsBar>
-        <PrimaryButton onClick={openAddPlan}>
-          <Plus className="w-4 h-4" />
-          Add Plan
-        </PrimaryButton>
-      </ActionsBar>
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-border">
+        <button
+          onClick={() => setActiveTab('plans')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === 'plans'
+              ? 'border-success text-success'
+              : 'border-transparent text-muted hover:text-foreground'
+          }`}
+        >
+          Accounting Plans
+        </button>
+        <button
+          onClick={() => setActiveTab('request')}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === 'request'
+              ? 'border-success text-success'
+              : 'border-transparent text-muted hover:text-foreground'
+          }`}
+        >
+          Send Request
+        </button>
+      </div>
 
-      <AccountingPlanList
-        plans={plans}
-        subs={subs}
-        search={planSearch}
-        onSearchChange={setPlanSearch}
-        onEdit={openEditPlan}
-        onDelete={requestDeletePlan}
-        onSaveSub={handleSaveSub}
-        onDeleteSub={requestDeleteSub}
-        subSaving={subSaving}
-      />
+      {activeTab === 'plans' && (
+        <>
+          <ActionsBar>
+            <PrimaryButton onClick={openAddPlan}>
+              <Plus className="w-4 h-4" />
+              Add Plan
+            </PrimaryButton>
+          </ActionsBar>
+
+          <AccountingPlanList
+            plans={plans}
+            subs={subs}
+            search={planSearch}
+            onSearchChange={setPlanSearch}
+            onEdit={openEditPlan}
+            onDelete={requestDeletePlan}
+            onSaveSub={handleSaveSub}
+            onDeleteSub={requestDeleteSub}
+            subSaving={subSaving}
+          />
+        </>
+      )}
+
+      {activeTab === 'request' && (
+        <AccountingPlanRequestTab
+          plans={plans}
+          subs={subs}
+          onSubmit={handleRequest}
+          isLoading={requestLoading}
+        />
+      )}
 
       {/* Plan dialog */}
       <AccountingPlanDialog
