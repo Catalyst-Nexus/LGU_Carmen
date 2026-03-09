@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 import type { Employee } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
+import { createEmployee } from "@/services/hrService";
+import type { EmployeeFormData } from "@/services/hrService";
 import LinkAccountDialog from "../components/LinkAccountDialog";
+import EmployeeDialog from "../components/EmployeeDialog";
 
 // Raw row shape returned by the Supabase hr.personnel query
 interface PersonnelRow {
@@ -85,6 +88,8 @@ const EmployeeMasterlist = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
   const [linkEmployee, setLinkEmployee] = useState<Employee | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const loadEmployees = useCallback(async () => {
     setIsLoading(true);
@@ -121,6 +126,18 @@ const EmployeeMasterlist = () => {
   const linkedUserIds = employees
     .filter((e) => e.user_id !== null)
     .map((e) => e.user_id as string);
+
+  const handleAddEmployee = async (data: EmployeeFormData) => {
+    setIsSaving(true);
+    const result = await createEmployee(data);
+    setIsSaving(false);
+    if (result.success) {
+      setShowAddDialog(false);
+      loadEmployees();
+    } else {
+      alert(result.error || "Failed to add employee");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -166,7 +183,7 @@ const EmployeeMasterlist = () => {
       />
 
       <ActionsBar>
-        <PrimaryButton onClick={() => {}}>
+        <PrimaryButton onClick={() => setShowAddDialog(true)}>
           <Plus className="w-4 h-4" />
           Add Employee
         </PrimaryButton>
@@ -247,6 +264,13 @@ const EmployeeMasterlist = () => {
         onSearchChange={setSearch}
         searchPlaceholder="Search by name, number, or position..."
         emptyMessage={isLoading ? "Loading employees…" : "No employees found."}
+      />
+
+      <EmployeeDialog
+        open={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        onSubmit={handleAddEmployee}
+        isLoading={isSaving}
       />
 
       <LinkAccountDialog

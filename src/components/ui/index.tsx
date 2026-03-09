@@ -1,6 +1,14 @@
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
-import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import {
+  CheckCircle,
+  AlertCircle,
+  Info,
+  AlertTriangle,
+  X,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 // Stat Card Component
 interface StatCardProps {
@@ -206,6 +214,7 @@ interface DataTableProps<T> {
   title?: string;
   titleIcon?: ReactNode;
   keyField?: keyof T;
+  rowsPerPage?: number;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -217,7 +226,19 @@ export function DataTable<T extends { id: string }>({
   searchPlaceholder = "Search...",
   title,
   titleIcon,
+  rowsPerPage = 10,
 }: DataTableProps<T>) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to page 1 when data changes length (e.g. filter / search)
+  const totalPages = Math.max(1, Math.ceil(data.length / rowsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  if (safePage !== currentPage) setCurrentPage(safePage);
+
+  const startIdx = (safePage - 1) * rowsPerPage;
+  const pageData = data.slice(startIdx, startIdx + rowsPerPage);
+  const emptyRows = rowsPerPage - pageData.length;
+
   return (
     <div className="bg-surface border border-border rounded-2xl p-6">
       {/* Header */}
@@ -279,41 +300,139 @@ export function DataTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="text-center text-muted py-8"
-                >
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              data.map((item) => (
-                <tr
-                  key={item.id}
-                  className="hover:bg-background transition-colors"
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={String(col.key)}
-                      className={cn(
-                        "px-4 py-3 border-b border-border/50",
-                        col.className,
-                      )}
-                    >
-                      {col.render
-                        ? col.render(item)
-                        : col.key !== "actions"
-                          ? String(item[col.key as keyof T])
-                          : null}
-                    </td>
-                  ))}
+            {pageData.length === 0 && emptyRows === rowsPerPage ? (
+              <>
+                <tr>
+                  <td
+                    colSpan={columns.length}
+                    className="text-center text-muted py-3 border-b border-border/50"
+                  >
+                    {emptyMessage}
+                  </td>
                 </tr>
-              ))
+                {/* Fill remaining rows so the table stays the same height */}
+                {Array.from({ length: rowsPerPage - 1 }).map((_, i) => (
+                  <tr key={`empty-${i}`}>
+                    <td
+                      colSpan={columns.length}
+                      className="px-4 py-3 border-b border-border/50"
+                    >
+                      &nbsp;
+                    </td>
+                  </tr>
+                ))}
+              </>
+            ) : (
+              <>
+                {pageData.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="hover:bg-background transition-colors"
+                  >
+                    {columns.map((col) => (
+                      <td
+                        key={String(col.key)}
+                        className={cn(
+                          "px-4 py-3 border-b border-border/50",
+                          col.className,
+                        )}
+                      >
+                        {col.render
+                          ? col.render(item)
+                          : col.key !== "actions"
+                            ? String(item[col.key as keyof T])
+                            : null}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {/* Pad with empty rows to keep table height consistent */}
+                {Array.from({ length: emptyRows }).map((_, i) => (
+                  <tr key={`pad-${i}`}>
+                    {columns.map((col) => (
+                      <td
+                        key={String(col.key)}
+                        className={cn(
+                          "px-4 py-3 border-b border-border/50",
+                          col.className,
+                        )}
+                      >
+                        &nbsp;
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </>
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between mt-4 text-sm text-muted">
+        <span>
+          {data.length > 0
+            ? `Showing ${startIdx + 1}–${Math.min(startIdx + rowsPerPage, data.length)} of ${data.length}`
+            : `0 results`}
+        </span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {Array.from({ length: totalPages }).map((_, i) => {
+              const page = i + 1;
+              // Show first, last, and pages near current
+              if (
+                page === 1 ||
+                page === totalPages ||
+                Math.abs(page - safePage) <= 1
+              ) {
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={cn(
+                      "min-w-[32px] h-8 rounded text-sm font-medium transition-colors",
+                      page === safePage
+                        ? "bg-success text-white"
+                        : "hover:bg-background",
+                    )}
+                  >
+                    {page}
+                  </button>
+                );
+              }
+              // Ellipsis — only render once per gap
+              if (page === 2 && safePage > 3) {
+                return (
+                  <span key="start-dots" className="px-1">
+                    …
+                  </span>
+                );
+              }
+              if (page === totalPages - 1 && safePage < totalPages - 2) {
+                return (
+                  <span key="end-dots" className="px-1">
+                    …
+                  </span>
+                );
+              }
+              return null;
+            })}
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface Office {
   id: string;
@@ -25,11 +25,28 @@ export interface EmployeeFormData {
   first_name: string;
   middle_name: string;
   last_name: string;
+  suffix: string;
   pos_id: string;
   o_id: string;
-  employment_status: 'permanent' | 'casual' | 'coterminous' | 'contractual' | 'job_order';
+  employment_status:
+    | "permanent"
+    | "casual"
+    | "coterminous"
+    | "contractual"
+    | "job_order";
   date_hired: string;
   is_active: boolean;
+  // CSC personal info
+  birth_date: string;
+  civil_status: "single" | "married" | "widowed" | "separated" | "";
+  blood_type: string;
+  contact_number: string;
+  address: string;
+  // Government IDs
+  gsis_number: string;
+  philhealth_number: string;
+  pagibig_number: string;
+  tin: string;
 }
 
 /**
@@ -39,13 +56,13 @@ export const fetchOffices = async (): Promise<Office[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('office')
-    .select('id, description')
-    .order('description');
+    .schema("hr")
+    .from("office")
+    .select("id, description")
+    .order("description");
 
   if (error) {
-    console.error('Error fetching offices:', error);
+    console.error("Error fetching offices:", error);
     return [];
   }
 
@@ -59,13 +76,13 @@ export const fetchPositions = async (): Promise<Position[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('position')
-    .select('id, description, item_no')
-    .order('description');
+    .schema("hr")
+    .from("position")
+    .select("id, description, item_no")
+    .order("description");
 
   if (error) {
-    console.error('Error fetching positions:', error);
+    console.error("Error fetching positions:", error);
     return [];
   }
 
@@ -79,14 +96,14 @@ export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('salary_rate')
-    .select('id, description')
-    .eq('is_active', true)
-    .order('description');
+    .schema("hr")
+    .from("salary_rate")
+    .select("id, description")
+    .eq("is_active", true)
+    .order("description");
 
   if (error) {
-    console.error('Error fetching salary rates:', error);
+    console.error("Error fetching salary rates:", error);
     return [];
   }
 
@@ -100,13 +117,13 @@ export const fetchPositionTypes = async (): Promise<PositionType[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('pos_type')
-    .select('id, description')
-    .order('description');
+    .schema("hr")
+    .from("pos_type")
+    .select("id, description")
+    .order("description");
 
   if (error) {
-    console.error('Error fetching position types:', error);
+    console.error("Error fetching position types:", error);
     return [];
   }
 
@@ -117,19 +134,34 @@ export const fetchPositionTypes = async (): Promise<PositionType[]> => {
  * Create a new employee in hr.personnel table
  */
 export const createEmployee = async (
-  employeeData: EmployeeFormData
+  employeeData: EmployeeFormData,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
+  // Convert empty strings to null for optional / unique columns
+  const cleaned = {
+    ...employeeData,
+    suffix: employeeData.suffix || "",
+    birth_date: employeeData.birth_date || null,
+    civil_status: employeeData.civil_status || null,
+    blood_type: employeeData.blood_type || null,
+    contact_number: employeeData.contact_number || null,
+    address: employeeData.address || "",
+    gsis_number: employeeData.gsis_number || null,
+    philhealth_number: employeeData.philhealth_number || null,
+    pagibig_number: employeeData.pagibig_number || null,
+    tin: employeeData.tin || null,
+  };
+
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel')
-    .insert([employeeData]);
+    .schema("hr")
+    .from("personnel")
+    .insert([cleaned]);
 
   if (error) {
-    console.error('Error creating employee:', error);
+    console.error("Error creating employee:", error);
     return { success: false, error: error.message };
   }
 
@@ -141,20 +173,20 @@ export const createEmployee = async (
  */
 export const updateEmployee = async (
   id: string,
-  employeeData: Partial<EmployeeFormData>
+  employeeData: Partial<EmployeeFormData>,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel')
+    .schema("hr")
+    .from("personnel")
     .update(employeeData)
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error updating employee:', error);
+    console.error("Error updating employee:", error);
     return { success: false, error: error.message };
   }
 
@@ -165,20 +197,20 @@ export const updateEmployee = async (
  * Delete an employee from hr.personnel table
  */
 export const deleteEmployee = async (
-  id: string
+  id: string,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel')
+    .schema("hr")
+    .from("personnel")
     .delete()
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error deleting employee:', error);
+    console.error("Error deleting employee:", error);
     return { success: false, error: error.message };
   }
 
@@ -202,19 +234,19 @@ export interface PlantillaPositionFormData {
  * Create a new position in hr.position table
  */
 export const createPosition = async (
-  positionData: PlantillaPositionFormData
+  positionData: PlantillaPositionFormData,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('position')
+    .schema("hr")
+    .from("position")
     .insert([positionData]);
 
   if (error) {
-    console.error('Error creating position:', error);
+    console.error("Error creating position:", error);
     return { success: false, error: error.message };
   }
 
@@ -226,20 +258,20 @@ export const createPosition = async (
  */
 export const updatePosition = async (
   id: string,
-  positionData: Partial<PlantillaPositionFormData>
+  positionData: Partial<PlantillaPositionFormData>,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('position')
+    .schema("hr")
+    .from("position")
     .update(positionData)
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error updating position:', error);
+    console.error("Error updating position:", error);
     return { success: false, error: error.message };
   }
 
@@ -250,20 +282,20 @@ export const updatePosition = async (
  * Delete a position from hr.position table
  */
 export const deletePosition = async (
-  id: string
+  id: string,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('position')
+    .schema("hr")
+    .from("position")
     .delete()
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error deleting position:', error);
+    console.error("Error deleting position:", error);
     return { success: false, error: error.message };
   }
 
@@ -287,7 +319,7 @@ export interface LeaveApplicationFormData {
   date_to: string;
   days: number;
   remarks: string;
-  status: 'pending' | 'approved' | 'denied' | 'cancelled';
+  status: "pending" | "approved" | "denied" | "cancelled";
 }
 
 /**
@@ -297,14 +329,14 @@ export const fetchLeaveSubtypes = async (): Promise<LeaveSubtype[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('leave_out_subtype')
-    .select('id, description, code')
-    .eq('is_active', true)
-    .order('description');
+    .schema("hr")
+    .from("leave_out_subtype")
+    .select("id, description, code")
+    .eq("is_active", true)
+    .order("description");
 
   if (error) {
-    console.error('Error fetching leave subtypes:', error);
+    console.error("Error fetching leave subtypes:", error);
     return [];
   }
 
@@ -318,20 +350,20 @@ export const fetchPersonnelForLeave = async () => {
   if (!isSupabaseConfigured() || !supabase) return [];
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel')
-    .select('id, first_name, middle_name, last_name')
-    .eq('is_active', true)
-    .order('last_name');
+    .schema("hr")
+    .from("personnel")
+    .select("id, first_name, middle_name, last_name")
+    .eq("is_active", true)
+    .order("last_name");
 
   if (error) {
-    console.error('Error fetching personnel:', error);
+    console.error("Error fetching personnel:", error);
     return [];
   }
 
   return (data || []).map((p: any) => ({
     id: p.id,
-    name: `${p.last_name}, ${p.first_name} ${p.middle_name || ''}`.trim(),
+    name: `${p.last_name}, ${p.first_name} ${p.middle_name || ""}`.trim(),
   }));
 };
 
@@ -339,28 +371,30 @@ export const fetchPersonnelForLeave = async () => {
  * Create a new leave application
  */
 export const createLeaveApplication = async (
-  leaveData: LeaveApplicationFormData
+  leaveData: LeaveApplicationFormData,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   // Create the leave application
   const { error: leaveError } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel_leave_out')
-    .insert([{
-      per_id: leaveData.per_id,
-      los_id: leaveData.los_id,
-      status: leaveData.status,
-      remarks: leaveData.remarks,
-      credits: leaveData.days,
-    }])
-    .select('id')
+    .schema("hr")
+    .from("personnel_leave_out")
+    .insert([
+      {
+        per_id: leaveData.per_id,
+        los_id: leaveData.los_id,
+        status: leaveData.status,
+        remarks: leaveData.remarks,
+        credits: leaveData.days,
+      },
+    ])
+    .select("id")
     .single();
 
   if (leaveError) {
-    console.error('Error creating leave application:', leaveError);
+    console.error("Error creating leave application:", leaveError);
     return { success: false, error: leaveError.message };
   }
 
@@ -375,10 +409,10 @@ export const createLeaveApplication = async (
  */
 export const updateLeaveApplication = async (
   id: string,
-  leaveData: Partial<LeaveApplicationFormData>
+  leaveData: Partial<LeaveApplicationFormData>,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const updateData: any = {};
@@ -389,13 +423,13 @@ export const updateLeaveApplication = async (
   if (leaveData.days) updateData.credits = leaveData.days;
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel_leave_out')
+    .schema("hr")
+    .from("personnel_leave_out")
     .update(updateData)
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error updating leave application:', error);
+    console.error("Error updating leave application:", error);
     return { success: false, error: error.message };
   }
 
@@ -406,20 +440,20 @@ export const updateLeaveApplication = async (
  * Delete a leave application
  */
 export const deleteLeaveApplication = async (
-  id: string
+  id: string,
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase) {
-    return { success: false, error: 'Supabase is not configured' };
+    return { success: false, error: "Supabase is not configured" };
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
-    .schema('hr')
-    .from('personnel_leave_out')
+    .schema("hr")
+    .from("personnel_leave_out")
     .delete()
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) {
-    console.error('Error deleting leave application:', error);
+    console.error("Error deleting leave application:", error);
     return { success: false, error: error.message };
   }
 
