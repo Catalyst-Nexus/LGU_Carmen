@@ -475,6 +475,7 @@ interface IconButtonProps {
   title: string;
   children: ReactNode;
   variant?: "default" | "success" | "danger";
+  disabled?: boolean;
 }
 
 export const IconButton = ({
@@ -482,18 +483,22 @@ export const IconButton = ({
   title,
   children,
   variant = "default",
+  disabled = false,
 }: IconButtonProps) => (
   <button
     className={cn(
       "p-1.5 rounded transition-colors",
-      variant === "danger"
-        ? "text-muted hover:text-danger hover:bg-danger/10"
-        : variant === "success"
-          ? "text-success hover:text-success hover:bg-success/10"
-          : "text-muted hover:text-success hover:bg-success/10",
+      disabled
+        ? "text-muted opacity-30 cursor-not-allowed"
+        : variant === "danger"
+          ? "text-muted hover:text-danger hover:bg-danger/10"
+          : variant === "success"
+            ? "text-success hover:text-success hover:bg-success/10"
+            : "text-muted hover:text-success hover:bg-success/10",
     )}
-    onClick={onClick}
+    onClick={disabled ? undefined : onClick}
     title={title}
+    disabled={disabled}
   >
     {children}
   </button>
