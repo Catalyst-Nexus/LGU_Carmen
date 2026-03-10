@@ -102,7 +102,9 @@ export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("salary_rate")
-    .select("id, description, is_perday, rate:rate_id ( amount, sg_number, step )")
+    .select(
+      "id, description, is_perday, rate:rate_id ( amount, sg_number, step )",
+    )
     .eq("is_active", true)
     .order("description");
 
@@ -116,8 +118,9 @@ export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
     return {
       id: row.id as string,
       description: row.description as string,
-      sg_number: (rate as Record<string, unknown>)?.sg_number as number | null ?? null,
-      step: (rate as Record<string, unknown>)?.step as number | null ?? null,
+      sg_number:
+        ((rate as Record<string, unknown>)?.sg_number as number | null) ?? null,
+      step: ((rate as Record<string, unknown>)?.step as number | null) ?? null,
       amount: Number((rate as Record<string, unknown>)?.amount ?? 0),
       is_perday: row.is_perday as boolean,
     };
@@ -488,9 +491,7 @@ export const fetchLeaveApplications = async () => {
     return {
       id: row.id,
       employee_id: row.per_id,
-      employee_name: per
-        ? `${per.last_name}, ${per.first_name}`
-        : "—",
+      employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
       leave_type: (sub?.code ?? "—") as string,
       date_from: row.applied_date,
       date_to: row.applied_date,

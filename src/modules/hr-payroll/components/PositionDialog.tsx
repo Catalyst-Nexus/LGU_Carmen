@@ -1,8 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
-import { BaseDialog, FormInput } from '@/components/ui/dialog';
-import type { PlantillaPosition } from '@/types/hr.types';
-import type { Office, SalaryRate, PositionType } from '@/services/hrService';
-import { fetchOffices, fetchSalaryRates, fetchPositionTypes } from '@/services/hrService';
+import { useState, useEffect, useMemo } from "react";
+import { BaseDialog, FormInput } from "@/components/ui/dialog";
+import type { PlantillaPosition } from "@/types/hr.types";
+import type { Office, SalaryRate, PositionType } from "@/services/hrService";
+import {
+  fetchOffices,
+  fetchSalaryRates,
+  fetchPositionTypes,
+} from "@/services/hrService";
 
 interface PositionDialogProps {
   open: boolean;
@@ -24,7 +28,9 @@ export interface PositionFormData {
 }
 
 const formatPeso = (amount: number) =>
-  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(
+    amount,
+  );
 
 const PositionDialog = ({
   open,
@@ -33,13 +39,13 @@ const PositionDialog = ({
   position,
   isLoading = false,
 }: PositionDialogProps) => {
-  const [itemNo, setItemNo] = useState('');
-  const [positionTitle, setPositionTitle] = useState('');
-  const [selectedSG, setSelectedSG] = useState('');
-  const [selectedStep, setSelectedStep] = useState('');
-  const [positionTypeId, setPositionTypeId] = useState('');
-  const [officeId, setOfficeId] = useState('');
-  const [authorization, setAuthorization] = useState('');
+  const [itemNo, setItemNo] = useState("");
+  const [positionTitle, setPositionTitle] = useState("");
+  const [selectedSG, setSelectedSG] = useState("");
+  const [selectedStep, setSelectedStep] = useState("");
+  const [positionTypeId, setPositionTypeId] = useState("");
+  const [officeId, setOfficeId] = useState("");
+  const [authorization, setAuthorization] = useState("");
   const [isFilled, setIsFilled] = useState(false);
   const [slots, setSlots] = useState(1);
 
@@ -62,7 +68,7 @@ const PositionDialog = ({
     if (!selectedSG) return [];
     const sg = Number(selectedSG);
     return salaryRates
-      .filter(sr => sr.sg_number === sg && sr.step !== null)
+      .filter((sr) => sr.sg_number === sg && sr.step !== null)
       .sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
   }, [salaryRates, selectedSG]);
 
@@ -71,20 +77,23 @@ const PositionDialog = ({
     if (!selectedSG || !selectedStep) return null;
     const sg = Number(selectedSG);
     const step = Number(selectedStep);
-    return salaryRates.find(sr => sr.sg_number === sg && sr.step === step) ?? null;
+    return (
+      salaryRates.find((sr) => sr.sg_number === sg && sr.step === step) ?? null
+    );
   }, [salaryRates, selectedSG, selectedStep]);
 
   // Preview slot item numbers
   const slotPreview = useMemo(() => {
     if (!position && slots > 1 && itemNo.trim()) {
-      const lastDash = itemNo.lastIndexOf('-');
+      const lastDash = itemNo.lastIndexOf("-");
       if (lastDash === -1) return null;
       const prefix = itemNo.substring(0, lastDash);
       const numStr = itemNo.substring(lastDash + 1);
       const num = parseInt(numStr, 10);
       if (isNaN(num) || !prefix) return null;
-      return Array.from({ length: slots }, (_, i) =>
-        `${prefix}-${String(num + i).padStart(numStr.length, '0')}`
+      return Array.from(
+        { length: slots },
+        (_, i) => `${prefix}-${String(num + i).padStart(numStr.length, "0")}`,
       );
     }
     return null;
@@ -114,17 +123,15 @@ const PositionDialog = ({
     if (availableSteps.length > 0) {
       setSelectedStep(String(availableSteps[0].step));
     } else {
-      setSelectedStep('');
+      setSelectedStep("");
     }
   }, [selectedSG, availableSteps.length]);
 
   const loadDropdownData = async () => {
     setLoadingData(true);
-    const [officesData, salaryRatesData, positionTypesData] = await Promise.all([
-      fetchOffices(),
-      fetchSalaryRates(),
-      fetchPositionTypes(),
-    ]);
+    const [officesData, salaryRatesData, positionTypesData] = await Promise.all(
+      [fetchOffices(), fetchSalaryRates(), fetchPositionTypes()],
+    );
     setOffices(officesData);
     setSalaryRates(salaryRatesData);
     setPositionTypes(positionTypesData);
@@ -132,13 +139,13 @@ const PositionDialog = ({
   };
 
   const resetForm = () => {
-    setItemNo('');
-    setPositionTitle('');
-    setSelectedSG('');
-    setSelectedStep('');
-    setPositionTypeId('');
-    setOfficeId('');
-    setAuthorization('');
+    setItemNo("");
+    setPositionTitle("");
+    setSelectedSG("");
+    setSelectedStep("");
+    setPositionTypeId("");
+    setOfficeId("");
+    setAuthorization("");
     setIsFilled(false);
     setSlots(1);
   };
@@ -153,18 +160,18 @@ const PositionDialog = ({
       o_id: officeId,
       authorization: authorization.trim(),
       is_filled: isFilled,
-      ...((!position && slots > 1) ? { slots } : {}),
+      ...(!position && slots > 1 ? { slots } : {}),
     };
     onSubmit(positionData);
   };
 
   const isFormValid = () => {
     return (
-      itemNo.trim() !== '' &&
-      positionTitle.trim() !== '' &&
+      itemNo.trim() !== "" &&
+      positionTitle.trim() !== "" &&
       resolvedRate !== null &&
-      positionTypeId !== '' &&
-      officeId !== ''
+      positionTypeId !== "" &&
+      officeId !== ""
     );
   };
 
@@ -172,9 +179,9 @@ const PositionDialog = ({
     <BaseDialog
       open={open}
       onClose={onClose}
-      title={position ? 'Edit Position' : 'Add New Position'}
+      title={position ? "Edit Position" : "Add New Position"}
       onSubmit={handleSubmit}
-      submitLabel={position ? 'Save Changes' : 'Add Position'}
+      submitLabel={position ? "Save Changes" : "Add Position"}
       isLoading={isLoading || loadingData}
     >
       <div className="space-y-4">
@@ -191,7 +198,10 @@ const PositionDialog = ({
         {/* Number of Slots — only when adding */}
         {!position && (
           <div className="space-y-1.5">
-            <label htmlFor="slots" className="block text-sm font-medium text-foreground">
+            <label
+              htmlFor="slots"
+              className="block text-sm font-medium text-foreground"
+            >
               Number of Slots
             </label>
             <input
@@ -201,11 +211,13 @@ const PositionDialog = ({
               max={50}
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
               value={slots}
-              onChange={(e) => setSlots(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+              onChange={(e) =>
+                setSlots(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
+              }
             />
             {slotPreview && slotPreview.length > 1 && (
               <p className="text-xs text-muted-foreground">
-                Will create: {slotPreview.join(', ')}
+                Will create: {slotPreview.join(", ")}
               </p>
             )}
           </div>
@@ -271,7 +283,10 @@ const PositionDialog = ({
 
         {/* Position Type Selector */}
         <div className="space-y-1.5">
-          <label htmlFor="position-type" className="block text-sm font-medium text-foreground">
+          <label
+            htmlFor="position-type"
+            className="block text-sm font-medium text-foreground"
+          >
             Position Type
             <span className="text-error ml-1">*</span>
           </label>
@@ -294,7 +309,10 @@ const PositionDialog = ({
 
         {/* Office Selector */}
         <div className="space-y-1.5">
-          <label htmlFor="office" className="block text-sm font-medium text-foreground">
+          <label
+            htmlFor="office"
+            className="block text-sm font-medium text-foreground"
+          >
             Office
             <span className="text-error ml-1">*</span>
           </label>
@@ -333,7 +351,10 @@ const PositionDialog = ({
             checked={isFilled}
             onChange={(e) => setIsFilled(e.target.checked)}
           />
-          <label htmlFor="is-filled" className="text-sm font-medium text-foreground">
+          <label
+            htmlFor="is-filled"
+            className="text-sm font-medium text-foreground"
+          >
             Position is Filled
           </label>
         </div>

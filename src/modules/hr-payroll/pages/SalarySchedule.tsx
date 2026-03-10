@@ -105,9 +105,14 @@ const SalarySchedule = () => {
           </>
         ) : (
           <>
-            <PrimaryButton onClick={handleSave} disabled={!hasChanges || saving}>
+            <PrimaryButton
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+            >
               <Save className="w-4 h-4" />
-              {saving ? "Saving..." : `Save Changes (${Object.keys(edits).length})`}
+              {saving
+                ? "Saving..."
+                : `Save Changes (${Object.keys(edits).length})`}
             </PrimaryButton>
             <PrimaryButton onClick={handleCancel}>
               <X className="w-4 h-4" />
@@ -119,7 +124,8 @@ const SalarySchedule = () => {
 
       {editMode && (
         <div className="px-4 py-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm">
-          Editing mode — click on any amount to change it. Changes are saved in bulk.
+          Editing mode — click on any amount to change it. Changes are saved in
+          bulk.
         </div>
       )}
 
@@ -240,9 +246,7 @@ const SalarySchedule = () => {
                           : "border-border"
                       }`}
                       value={displayAmt}
-                      onChange={(e) =>
-                        handleAmountChange(r.id, e.target.value)
-                      }
+                      onChange={(e) => handleAmountChange(r.id, e.target.value)}
                     />
                   ) : (
                     <span className="text-foreground tabular-nums font-medium">

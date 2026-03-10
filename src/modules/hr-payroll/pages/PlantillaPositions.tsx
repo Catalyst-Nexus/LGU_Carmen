@@ -26,8 +26,20 @@ interface PositionRow {
     | { id: string; description: string }
     | null;
   salary_rate:
-    | { description: string; rate: { sg_number: number | null; step: number | null; amount: number } | { sg_number: number | null; step: number | null; amount: number }[] | null }[]
-    | { description: string; rate: { sg_number: number | null; step: number | null; amount: number } | { sg_number: number | null; step: number | null; amount: number }[] | null }
+    | {
+        description: string;
+        rate:
+          | { sg_number: number | null; step: number | null; amount: number }
+          | { sg_number: number | null; step: number | null; amount: number }[]
+          | null;
+      }[]
+    | {
+        description: string;
+        rate:
+          | { sg_number: number | null; step: number | null; amount: number }
+          | { sg_number: number | null; step: number | null; amount: number }[]
+          | null;
+      }
     | null;
   pos_type: { description: string }[] | { description: string } | null;
   personnel: { first_name: string; last_name: string }[] | null;
@@ -61,7 +73,9 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
       ? row.salary_rate[0]
       : row.salary_rate;
     const rate = salaryRate
-      ? Array.isArray(salaryRate.rate) ? salaryRate.rate[0] : salaryRate.rate
+      ? Array.isArray(salaryRate.rate)
+        ? salaryRate.rate[0]
+        : salaryRate.rate
       : null;
     const posType = Array.isArray(row.pos_type)
       ? row.pos_type[0]
@@ -69,7 +83,7 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
 
     const sgLabel = rate?.sg_number
       ? `SG-${rate.sg_number} Step ${rate.step ?? 1}`
-      : salaryRate?.description ?? "—";
+      : (salaryRate?.description ?? "—");
     const monthlyAmount = rate?.amount ?? 0;
 
     return {
@@ -93,7 +107,9 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
 };
 
 /** Compute slot_info for each position: "filled/total" grouped by title + office */
-const computeSlotInfo = (positions: PlantillaPosition[]): PlantillaPosition[] => {
+const computeSlotInfo = (
+  positions: PlantillaPosition[],
+): PlantillaPosition[] => {
   const groups = new Map<string, { total: number; filled: number }>();
   for (const p of positions) {
     const key = `${p.position_title}||${p.office_id}`;
@@ -196,7 +212,9 @@ const PlantillaPositions = () => {
             render: (item) => {
               const [filled, total] = item.slot_info.split("/").map(Number);
               return (
-                <span className={`text-xs font-medium ${filled === total ? "text-success" : "text-warning"}`}>
+                <span
+                  className={`text-xs font-medium ${filled === total ? "text-success" : "text-warning"}`}
+                >
                   {item.slot_info}
                 </span>
               );
@@ -209,7 +227,10 @@ const PlantillaPositions = () => {
             render: (item) => (
               <span>
                 {item.monthly_salary
-                  ? new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(item.monthly_salary)
+                  ? new Intl.NumberFormat("en-PH", {
+                      style: "currency",
+                      currency: "PHP",
+                    }).format(item.monthly_salary)
                   : "—"}
               </span>
             ),
