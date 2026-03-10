@@ -32,14 +32,20 @@ export interface PlantillaPosition {
   id: string;
   item_number: string;
   position_title: string;
-  /** Derived from salary_rate → rate chain (e.g. "SG-10") */
+  /** e.g. "SG-10 Step 1" */
   salary_grade: string;
+  /** Monthly salary amount from hr.rate */
+  monthly_salary: number;
+  /** Legal basis — e.g. "SB Ord. No. 2024-015" or "RA 11466" */
+  authorization: string;
   office_id: string;
   office_name: string;
   pos_type: string;
   is_filled: boolean;
   incumbent_name: string | null;
   created_at: string;
+  /** Slot info like "2/3" (filled/total) for same position title + office */
+  slot_info: string;
 }
 
 export interface LeaveApplication {

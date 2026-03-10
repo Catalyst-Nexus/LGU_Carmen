@@ -223,6 +223,7 @@ const iconMap: Record<string, LucideIcon> = {
   // Commerce
   cart: ShoppingCart,
   dollar: DollarSign,
+  dollarsign: DollarSign,
 
   // Status & Indicators
   heart: Heart,

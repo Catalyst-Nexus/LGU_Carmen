@@ -1,17 +1,50 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton, DataTable, Tabs } from '@/components/ui'
 import { CalendarOff, Plus, RefreshCw } from 'lucide-react'
 import type { LeaveApplication } from '@/types/hr.types'
+import { createLeaveApplication, fetchLeaveApplications } from '@/services/hrService'
+import type { LeaveApplicationFormData } from '@/services/hrService'
+import LeaveDialog from '../components/LeaveDialog'
+import type { LeaveFormData } from '../components/LeaveDialog'
 
 const LeaveManagement = () => {
   const [leaves, setLeaves] = useState<LeaveApplication[]>([])
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [isLoading, setIsLoading] = useState(false)
+  const [showFileDialog, setShowFileDialog] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleRefresh = () => {
+  const loadLeaves = useCallback(async () => {
     setIsLoading(true)
-    setTimeout(() => { setLeaves([]); setIsLoading(false) }, 500)
+    const data = await fetchLeaveApplications()
+    setLeaves(data as LeaveApplication[])
+    setIsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    loadLeaves()
+  }, [loadLeaves])
+
+  const handleFileLeave = async (data: LeaveFormData) => {
+    setIsSaving(true)
+    const payload: LeaveApplicationFormData = {
+      per_id: data.per_id,
+      los_id: data.los_id,
+      date_from: data.date_from,
+      date_to: data.date_to,
+      days: data.days,
+      remarks: data.remarks,
+      status: data.status,
+    }
+    const result = await createLeaveApplication(payload)
+    setIsSaving(false)
+    if (result.success) {
+      setShowFileDialog(false)
+      loadLeaves()
+    } else {
+      alert(result.error || 'Failed to file leave application')
+    }
   }
 
   const filtered = leaves.filter(l => {
@@ -57,11 +90,11 @@ const LeaveManagement = () => {
       />
 
       <ActionsBar>
-        <PrimaryButton onClick={() => {}}>
+        <PrimaryButton onClick={() => setShowFileDialog(true)}>
           <Plus className="w-4 h-4" />
           File Leave
         </PrimaryButton>
-        <PrimaryButton onClick={handleRefresh}>
+        <PrimaryButton onClick={loadLeaves}>
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
         </PrimaryButton>
@@ -94,6 +127,13 @@ const LeaveManagement = () => {
         onSearchChange={setSearch}
         searchPlaceholder="Search by employee name..."
         emptyMessage="No leave applications found."
+      />
+
+      <LeaveDialog
+        open={showFileDialog}
+        onClose={() => setShowFileDialog(false)}
+        onSubmit={handleFileLeave}
+        isLoading={isSaving}
       />
     </div>
   )
