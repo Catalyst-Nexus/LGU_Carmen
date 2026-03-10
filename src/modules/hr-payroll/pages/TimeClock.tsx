@@ -9,6 +9,8 @@ import {
   XCircle,
   Loader2,
   UserPlus,
+  LogIn,
+  LogOut,
 } from "lucide-react";
 import {
   loadFaceModels,
@@ -20,7 +22,10 @@ import {
   captureSnapshotAsync,
   type FaceEnrollment,
   type ClockResult,
+  type MatchResult,
 } from "@/services/faceService";
+import { fetchTimeSlotSchedules } from "@/services/hrService";
+import type { TimeSlotSchedule } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +35,9 @@ type PageStatus =
   | "ready"
   | "scanning"
   | "matched"
+  | "choose-type"
+  | "choose-slot"
+  | "clocking"
   | "clocked"
   | "error"
   | "no-match"
@@ -52,6 +60,11 @@ const TimeClock = () => {
   const [enrollments, setEnrollments] = useState<FaceEnrollment[]>([]);
   const [clockResult, setClockResult] = useState<ClockResult | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Flow state: after face match, user picks type then slot
+  const [matchedPerson, setMatchedPerson] = useState<MatchResult | null>(null);
+  const [chosenType, setChosenType] = useState<1 | 2 | null>(null);
+  const [timeSlots, setTimeSlots] = useState<TimeSlotSchedule[]>([]);
 
   // Enrollment mode
   const [enrollMode, setEnrollMode] = useState(false);
@@ -131,6 +144,8 @@ const TimeClock = () => {
     setStatus("scanning");
     setMessage("Scanning face…");
     setClockResult(null);
+    setMatchedPerson(null);
+    setChosenType(null);
 
     const descriptor = await detectFace(videoRef.current);
     if (!descriptor) {
@@ -146,32 +161,73 @@ const TimeClock = () => {
       return;
     }
 
-    // Matched — clock them in/out
-    setStatus("matched");
-    setMessage(`Recognized: ${match.name} — clocking…`);
+    // Matched — now let user choose IN or OUT
+    setMatchedPerson(match);
+    setStatus("choose-type");
+    setMessage(`Recognized: ${match.name} — select Time In or Time Out`);
 
-    const result = await clockPerson(match.per_id, match.name);
-    setClockResult(result);
-
-    if (result.success) {
-      setStatus("clocked");
-      setMessage(
-        `${result.name} — ${result.slotLabel} recorded at ${result.time}`,
-      );
-    } else {
-      setStatus("error");
-      setMessage(result.error || "Failed to record time.");
-    }
-
-    // Auto-reset after 4 seconds
-    setTimeout(() => {
-      setStatus("ready");
-      setMessage(
-        `Ready — ${enrollments.length} face(s) enrolled. Press Scan to clock in/out.`,
-      );
-      setClockResult(null);
-    }, 4000);
+    // Preload time slots
+    const slots = await fetchTimeSlotSchedules();
+    setTimeSlots(slots);
   }, [status, enrollments]);
+
+  // ── Type chosen (IN/OUT) → show slot picker ────────────────────────────────
+  const handleChooseType = useCallback((type: 1 | 2) => {
+    setChosenType(type);
+    setStatus("choose-slot");
+    setMessage(`Select a time slot for ${type === 1 ? "IN" : "OUT"}`);
+  }, []);
+
+  // ── Slot chosen → clock the person ─────────────────────────────────────────
+  const handleChooseSlot = useCallback(
+    async (slot: TimeSlotSchedule) => {
+      if (!matchedPerson || chosenType === null) return;
+
+      setStatus("clocking");
+      setMessage(`Recording ${chosenType === 1 ? "IN" : "OUT"} — ${slot.description.replace(/_/g, " ")}…`);
+
+      const result = await clockPerson(
+        matchedPerson.per_id,
+        matchedPerson.name,
+        chosenType,
+        slot.id,
+        slot.description.replace(/_/g, " "),
+      );
+      setClockResult(result);
+
+      if (result.success) {
+        setStatus("clocked");
+        setMessage(
+          `${result.name} — ${result.slotLabel} recorded at ${result.time}`,
+        );
+      } else {
+        setStatus("error");
+        setMessage(result.error || "Failed to record time.");
+      }
+
+      // Auto-reset after 4 seconds
+      setTimeout(() => {
+        setStatus("ready");
+        setMessage(
+          `Ready — ${enrollments.length} face(s) enrolled. Press Scan to clock in/out.`,
+        );
+        setClockResult(null);
+        setMatchedPerson(null);
+        setChosenType(null);
+      }, 4000);
+    },
+    [matchedPerson, chosenType, enrollments.length],
+  );
+
+  // ── Cancel selection → back to ready ───────────────────────────────────────
+  const handleCancelSelection = useCallback(() => {
+    setStatus("ready");
+    setMessage(
+      `Ready — ${enrollments.length} face(s) enrolled. Press Scan to clock in/out.`,
+    );
+    setMatchedPerson(null);
+    setChosenType(null);
+  }, [enrollments.length]);
 
   // ── Enrollment ─────────────────────────────────────────────────────────────
   const openEnrollMode = useCallback(async () => {
@@ -229,6 +285,7 @@ const TimeClock = () => {
       case "loading":
         return <Loader2 className="w-6 h-6 animate-spin text-blue-400" />;
       case "scanning":
+      case "clocking":
         return <Loader2 className="w-6 h-6 animate-spin text-yellow-400" />;
       case "clocked":
         return <CheckCircle className="w-6 h-6 text-green-400" />;
@@ -236,6 +293,8 @@ const TimeClock = () => {
       case "no-match":
         return <XCircle className="w-6 h-6 text-red-400" />;
       case "matched":
+      case "choose-type":
+      case "choose-slot":
         return <UserCheck className="w-6 h-6 text-green-400" />;
       default:
         return <Camera className="w-6 h-6 text-muted" />;
@@ -247,10 +306,14 @@ const TimeClock = () => {
       case "clocked":
       case "matched":
         return "border-green-500 shadow-green-500/20";
+      case "choose-type":
+      case "choose-slot":
+        return "border-blue-500 shadow-blue-500/20";
       case "error":
       case "no-match":
         return "border-red-500 shadow-red-500/20";
       case "scanning":
+      case "clocking":
         return "border-yellow-500 shadow-yellow-500/20 animate-pulse";
       default:
         return "border-border";
@@ -341,24 +404,102 @@ const TimeClock = () => {
             )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex gap-3 mt-4">
-            <button
-              onClick={handleScan}
-              disabled={status === "loading" || status === "scanning"}
-              className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-white font-semibold py-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
-            >
-              <Camera className="w-5 h-5" />
-              Scan & Clock
-            </button>
-            <button
-              onClick={openEnrollMode}
-              disabled={status === "loading"}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50"
-            >
-              <UserPlus className="w-5 h-5" />
-              Enroll
-            </button>
+          {/* Action buttons / Selection UI */}
+          <div className="mt-4 space-y-3">
+            {/* Default: Scan & Enroll */}
+            {(status === "ready" || status === "loading" || status === "no-match" || status === "error") && (
+              <div className="flex gap-3">
+                <button
+                  onClick={handleScan}
+                  disabled={status === "loading"}
+                  className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-white font-semibold py-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                >
+                  <Camera className="w-5 h-5" />
+                  Scan Face
+                </button>
+                <button
+                  onClick={openEnrollMode}
+                  disabled={status === "loading"}
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  <UserPlus className="w-5 h-5" />
+                  Enroll
+                </button>
+              </div>
+            )}
+
+            {/* Step 2: Choose IN or OUT */}
+            {status === "choose-type" && matchedPerson && (
+              <div className="space-y-3">
+                <p className="text-center text-sm font-medium text-success">
+                  Recognized: {matchedPerson.name}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleChooseType(1)}
+                    className="flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-blue-500 bg-blue-500/10 text-blue-500 text-xl font-bold hover:bg-blue-500/20 transition-all"
+                  >
+                    <LogIn className="w-6 h-6" />
+                    In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChooseType(2)}
+                    className="flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-orange-500 bg-orange-500/10 text-orange-500 text-xl font-bold hover:bg-orange-500/20 transition-all"
+                  >
+                    <LogOut className="w-6 h-6" />
+                    Out
+                  </button>
+                </div>
+                <button
+                  onClick={handleCancelSelection}
+                  className="w-full py-2 text-sm text-muted hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Choose Time Slot */}
+            {status === "choose-slot" && matchedPerson && (
+              <div className="space-y-3">
+                <p className="text-center text-sm font-medium text-success">
+                  {matchedPerson.name} — {chosenType === 1 ? "Time In" : "Time Out"}
+                </p>
+                <div className="flex flex-col gap-2">
+                  {timeSlots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      onClick={() => handleChooseSlot(slot)}
+                      className="w-full text-left px-4 py-3 rounded-xl border-2 border-border bg-background text-foreground hover:border-success hover:bg-success/5 transition-all"
+                    >
+                      <span className="font-semibold capitalize">
+                        {slot.description.replace(/_/g, " ")}
+                      </span>
+                      <span className="ml-2 text-sm text-muted">
+                        {slot.time_start.slice(0, 5)} – {slot.time_end.slice(0, 5)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={handleCancelSelection}
+                  className="w-full py-2 text-sm text-muted hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Clocking in progress */}
+            {status === "clocking" && (
+              <div className="flex items-center justify-center gap-2 py-4 text-yellow-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="font-medium">Recording…</span>
+              </div>
+            )}
           </div>
         </div>
 

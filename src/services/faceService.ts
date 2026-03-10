@@ -25,7 +25,7 @@ export interface MatchResult {
 
 export interface ClockResult {
   success: boolean;
-  slot: "in1" | "out1" | "in2" | "out2";
+  type: 1 | 2;
   slotLabel: string;
   name: string;
   time: string;
@@ -244,17 +244,21 @@ export const resolveTimeSlot = (
 // ── Clock In/Out ─────────────────────────────────────────────────────────────
 
 /**
- * Clock a matched person into the next available time slot for today.
- * Uses upsert on (per_id, date) and only sets the resolved slot column.
+ * Clock a matched person with the chosen time_identifier (1=IN, 2=OUT)
+ * and time_slot_id. Inserts a new row into hr.time_record.
+ * The DB trigger auto-calculates total_hours when time_identifier=2.
  */
 export const clockPerson = async (
   perId: string,
   name: string,
+  timeIdentifier: 1 | 2,
+  timeSlotId: string,
+  slotLabel: string,
 ): Promise<ClockResult> => {
   if (!isSupabaseConfigured() || !supabase)
     return {
       success: false,
-      slot: "in1",
+      type: 1,
       slotLabel: "",
       name,
       time: "",
@@ -262,45 +266,34 @@ export const clockPerson = async (
     };
 
   const now = new Date();
-  const today = now.toISOString().split("T")[0]; // YYYY-MM-DD
-  const timeStr = now.toTimeString().split(" ")[0]; // HH:MM:SS
+  const today = now.toISOString().split("T")[0];
+  const timeStr = now.toTimeString().split(" ")[0];
 
-  // Fetch today's existing record for this person
-  const { data: existing } = await supabase
-    .schema("hr")
-    .from("time_record")
-    .select("in1, out1, in2, out2")
-    .eq("per_id", perId)
-    .eq("date", today)
-    .maybeSingle();
+  const row: Record<string, unknown> = {
+    per_id: perId,
+    date: today,
+    time_slot_id: timeSlotId,
+    time_identifier: timeIdentifier,
+  };
 
-  const slot = resolveTimeSlot(now, existing);
-  if (!slot) {
-    return {
-      success: false,
-      slot: "in1",
-      slotLabel: "",
-      name,
-      time: timeStr,
-      error: "All time slots for this period are already filled",
-    };
+  // Store time in the correct column
+  if (timeIdentifier === 1) {
+    row.in1 = timeStr;
+  } else {
+    row.out1 = timeStr;
   }
 
-  // Upsert the time_record row, setting only the resolved slot
   const { error } = await supabase
     .schema("hr")
     .from("time_record")
-    .upsert(
-      { per_id: perId, date: today, [slot]: timeStr },
-      { onConflict: "per_id,date" },
-    );
+    .insert([row]);
 
   if (error) {
     console.error("Clock error:", error);
     return {
       success: false,
-      slot,
-      slotLabel: getSlotLabel(slot),
+      type: timeIdentifier,
+      slotLabel,
       name,
       time: timeStr,
       error: error.message,
@@ -309,8 +302,8 @@ export const clockPerson = async (
 
   return {
     success: true,
-    slot,
-    slotLabel: getSlotLabel(slot),
+    type: timeIdentifier,
+    slotLabel: `${timeIdentifier === 1 ? "IN" : "OUT"} — ${slotLabel}`,
     name,
     time: timeStr,
   };

@@ -76,6 +76,18 @@ export interface LeaveApplication {
   created_at: string;
 }
 
+export interface TimeSlotSchedule {
+  id: string;
+  description: string;
+  time_start: string;
+  time_end: string;
+  /** 1 = count on clock-in day, 2 = count on next day */
+  actual_date: 1 | 2;
+  is_midnight_crossing: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   employee_id: string;
@@ -93,6 +105,14 @@ export interface AttendanceRecord {
   ot_in: string | null;
   /** OT out */
   ot_out: string | null;
+  /** FK to hr.time_slot_schedule */
+  time_slot_id: string | null;
+  /** Time slot description (joined) */
+  time_slot_desc: string | null;
+  /** 1 = IN record, 2 = OUT record */
+  time_identifier: 1 | 2;
+  /** Computed total hours for the paired IN/OUT */
+  total_hours: number;
   /** Trigger-computed pay */
   pay_amount: number;
   status: "present" | "absent" | "late" | "halfday" | "holiday";
