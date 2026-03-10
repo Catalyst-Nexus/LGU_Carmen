@@ -12,6 +12,7 @@ interface BaseDialogProps {
   cancelLabel?: string;
   isLoading?: boolean;
   size?: "sm" | "md" | "lg" | "xl";
+  bodyClassName?: string;
 }
 
 const dialogSizes = {
@@ -31,6 +32,7 @@ export const BaseDialog = ({
   cancelLabel = "Cancel",
   isLoading = false,
   size = "md",
+  bodyClassName,
 }: BaseDialogProps) => {
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -55,7 +57,15 @@ export const BaseDialog = ({
           </div>
 
           {/* Body */}
-          <div className="p-5 overflow-y-auto flex-1">{children}</div>
+          <div
+            className={
+              ["p-5", "overflow-y-auto", "flex-1", bodyClassName]
+                .filter(Boolean)
+                .join(" ")
+            }
+          >
+            {children}
+          </div>
 
           {/* Footer */}
           <div className="flex justify-end gap-3 p-5 border-t border-border">
