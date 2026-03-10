@@ -17,12 +17,8 @@ interface TimeRecordRow {
   id: string;
   per_id: string;
   date: string;
-  in1: string | null;
-  out1: string | null;
-  in2: string | null;
-  out2: string | null;
-  ot_in: string | null;
-  ot_out: string | null;
+  in: string | null;
+  out: string | null;
   time_slot_id: string | null;
   time_identifier: number | null;
   total_hours: number | null;
@@ -45,7 +41,7 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
     .from("time_record")
     .select(
       `
-      id, per_id, date, in1, out1, in2, out2, ot_in, ot_out,
+      id, per_id, date, in, out,
       time_slot_id, time_identifier, total_hours,
       pay_amount, created_at,
       personnel:per_id ( first_name, last_name ),
@@ -61,13 +57,10 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
   }
 
   return ((data as TimeRecordRow[]) || []).map((row) => {
-    const hasAnyTime = row.in1 || row.out1 || row.in2 || row.out2;
+    const hasTime = row.in || row.out;
     let status: AttendanceRecord["status"] = "absent";
-    if (hasAnyTime) {
-      const hasAM = row.in1 && row.out1;
-      const hasPM = row.in2 && row.out2;
-      status =
-        hasAM && hasPM ? "present" : hasAM || hasPM ? "halfday" : "absent";
+    if (hasTime) {
+      status = row.in && row.out ? "present" : "halfday";
     }
 
     return {
@@ -77,12 +70,8 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
         ? `${row.personnel.last_name}, ${row.personnel.first_name}`
         : "—",
       date: row.date,
-      in1: row.in1,
-      out1: row.out1,
-      in2: row.in2,
-      out2: row.out2,
-      ot_in: row.ot_in,
-      ot_out: row.ot_out,
+      in: row.in,
+      out: row.out,
       time_slot_id: row.time_slot_id,
       time_slot_desc: row.time_slot_schedule?.description ?? null,
       time_identifier: (row.time_identifier ?? 1) as 1 | 2,
@@ -175,14 +164,14 @@ const AttendanceDTR = () => {
           { key: "employee_name", header: "Employee" },
           { key: "date", header: "Date" },
           {
-            key: "in1",
+            key: "in" as keyof AttendanceRecord,
             header: "In",
-            render: (item) => <span>{item.in1 || "—"}</span>,
+            render: (item) => <span>{item.in || "\u2014"}</span>,
           },
           {
-            key: "out1",
+            key: "out" as keyof AttendanceRecord,
             header: "Out",
-            render: (item) => <span>{item.out1 || "—"}</span>,
+            render: (item) => <span>{item.out || "\u2014"}</span>,
           },
           {
             key: "time_slot_desc",
