@@ -43,68 +43,28 @@ export interface ClassificationWithSubs extends ClassificationRow {
   subClassifications: SubClassificationRow[]
 }
 
-export const STATIC_CLASSIFICATIONS: ClassificationRow[] = [
-  {
-    id: 'general-public-services',
-    description: 'General Public Services',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
+export interface ClassificationTemplate {
+  id: string
+  description: string
+}
+
+export const FUNCTIONAL_CLASSIFICATION_TEMPLATES: ClassificationTemplate[] = [
+  { id: 'general-public-services', description: 'General Public Services' },
   {
     id: 'education-culture-sports-manpower',
     description: 'Education, Culture, Sports and Manpower Development',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
   },
-  {
-    id: 'health-services',
-    description: 'Health Services',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'labor-and-employment',
-    description: 'Labor and Employment',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'housing-and-community-development',
-    description: 'Housing and Community Development',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'social-welfare-services',
-    description: 'Social Welfare Services',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'economic-services',
-    description: 'Economic Services',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'other-services',
-    description: 'Other Services',
-    status: true,
-    editable: false,
-    created_at: new Date().toISOString(),
-  },
+  { id: 'health-services', description: 'Health Services' },
+  { id: 'labor-and-employment', description: 'Labor and Employment' },
+  { id: 'housing-and-community-development', description: 'Housing and Community Development' },
+  { id: 'social-welfare-services', description: 'Social Welfare Services' },
+  { id: 'economic-services', description: 'Economic Services' },
+  { id: 'other-services', description: 'Other Services' },
 ]
 
-const classificationState: ClassificationRow[] = STATIC_CLASSIFICATIONS.map((category) => ({
-  ...category,
-}))
+type ClassificationWithSubsResponse = ClassificationRow & {
+  classification_appropriation_sub?: SubClassificationRow[]
+}
 
 // ============================================================================
 // ESTIMATE INCOME (Main Categories)
@@ -289,65 +249,122 @@ export interface UpdateSubClassificationPayload {
   id: string
   description: string
   status: boolean
+  classificationId?: string
 }
 
-const inMemorySubClassifications: SubClassificationRow[] = []
+export interface CreateClassificationPayload {
+  description: string
+  status?: boolean
+}
 
-const createSubRecord = (payload: CreateSubClassificationPayload): SubClassificationRow => ({
-  id: crypto.randomUUID(),
-  created_at: new Date().toISOString(),
-  editable: true,
-  status: payload.status,
-  description: payload.description,
-  classification_appropriation: payload.classificationId,
-})
-
-export async function fetchSubClassifications(): Promise<SubClassificationRow[]> {
-  return [...inMemorySubClassifications]
+const ensureSupabase = () => {
+  if (!supabase) throw new Error('Supabase not configured')
+  return supabase
 }
 
 export async function fetchClassificationAppropriations(): Promise<ClassificationWithSubs[]> {
-  const subs = await fetchSubClassifications()
+  const client = ensureSupabase()
 
-  return classificationState.map((category) => ({
+  const { data, error } = await client
+    .schema('accounting')
+    .from('classification_appropriation')
+    .select(`
+      *,
+      classification_appropriation_sub (*)
+    `)
+    .order('description', { ascending: true })
+
+  if (error) throw error
+
+  const rows = (data || []) as ClassificationWithSubsResponse[]
+
+  return rows.map(({ classification_appropriation_sub, ...category }) => ({
     ...category,
-    subClassifications: subs.filter(
-      (sub) => sub.classification_appropriation === category.id,
-    ),
+    subClassifications: (classification_appropriation_sub ?? [])
+      .slice()
+      .sort((a, b) => a.description.localeCompare(b.description)),
   }))
 }
 
 export async function createSubClassification(payload: CreateSubClassificationPayload) {
-  const record = createSubRecord(payload)
-  inMemorySubClassifications.push(record)
-  return record
+  const client = ensureSupabase()
+
+  const { data, error } = await client
+    .schema('accounting')
+    .from('classification_appropriation_sub')
+    .insert({
+      description: payload.description,
+      status: payload.status,
+      editable: true,
+      classification_appropriation: payload.classificationId,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function createClassification(payload: CreateClassificationPayload) {
+  const client = ensureSupabase()
+
+  const { data, error } = await client
+    .schema('accounting')
+    .from('classification_appropriation')
+    .insert({
+      description: payload.description,
+      status: payload.status ?? true,
+      editable: true,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
 export async function updateSubClassification(payload: UpdateSubClassificationPayload) {
-  const index = inMemorySubClassifications.findIndex((sub) => sub.id === payload.id)
-  if (index === -1) throw new Error('Sub-classification not found')
+  const client = ensureSupabase()
 
-  const updated: SubClassificationRow = {
-    ...inMemorySubClassifications[index],
-    description: payload.description,
-    status: payload.status,
-  }
+  const { data, error } = await client
+    .schema('accounting')
+    .from('classification_appropriation_sub')
+    .update({
+      description: payload.description,
+      status: payload.status,
+      ...(payload.classificationId ? { classification_appropriation: payload.classificationId } : {}),
+    })
+    .eq('id', payload.id)
+    .select()
+    .single()
 
-  inMemorySubClassifications[index] = updated
-  return updated
+  if (error) throw error
+  return data
 }
 
 export async function deleteSubClassification(id: string): Promise<void> {
-  const index = inMemorySubClassifications.findIndex((sub) => sub.id === id)
-  if (index === -1) throw new Error('Sub-classification not found')
+  const client = ensureSupabase()
 
-  inMemorySubClassifications.splice(index, 1)
+  const { error } = await client
+    .schema('accounting')
+    .from('classification_appropriation_sub')
+    .update({ status: false })
+    .eq('id', id)
+
+  if (error) throw error
 }
 
-export function toggleCategoryStatus(categoryId: string, isActive: boolean) {
-  const target = classificationState.find((category) => category.id === categoryId)
-  if (!target) throw new Error('Classification not found')
+export async function toggleCategoryStatus(categoryId: string, isActive: boolean) {
+  const client = ensureSupabase()
 
-  target.status = isActive
-  return target
+  const { data, error } = await client
+    .schema('accounting')
+    .from('classification_appropriation')
+    .update({ status: isActive })
+    .eq('id', categoryId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }

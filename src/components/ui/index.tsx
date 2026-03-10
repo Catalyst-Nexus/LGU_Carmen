@@ -15,6 +15,7 @@ interface StatCardProps {
   label: string;
   value: number | string;
   color?: "default" | "success" | "warning" | "danger" | "primary";
+  icon?: ReactNode;
 }
 
 const colorStyles: Record<string, string> = {
@@ -25,39 +26,37 @@ const colorStyles: Record<string, string> = {
   primary: "text-blue-600",
 };
 
-const borderStyles: Record<string, string> = {
-  default: "from-green-500 to-green-400",
-  success: "from-green-500 to-green-400",
-  warning: "from-orange-500 to-orange-400",
-  danger: "from-red-500 to-red-400",
-  primary: "from-blue-500 to-blue-400",
+const iconBgStyles: Record<string, string> = {
+  default: "bg-primary/10 text-primary",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+  primary: "bg-blue-500/10 text-blue-600",
 };
 
 export const StatCard = ({
   label,
   value,
   color = "default",
+  icon,
 }: StatCardProps) => (
-  <div className="relative flex-1 min-w-0 bg-surface border border-border rounded-xl p-5 overflow-hidden">
-    {/* Animated border */}
-    <span
-      className={cn(
-        "absolute inset-0 rounded-xl pointer-events-none",
-        "bg-gradient-to-r opacity-20",
-        borderStyles[color],
+  <div className="flex-1 min-w-0 rounded-2xl bg-white/80 p-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
+    <div className="flex items-center gap-3 mb-2">
+      {icon && (
+        <span
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-full border border-white/40 shadow",
+            iconBgStyles[color],
+          )}
+        >
+          {icon}
+        </span>
       )}
-      style={{
-        mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        maskComposite: "exclude",
-        padding: "1px",
-      }}
-    />
-    <span className="block text-xs font-medium uppercase tracking-wider text-muted mb-1">
-      {label}
-    </span>
-    <span className={cn("block text-2xl font-bold", colorStyles[color])}>
-      {value}
-    </span>
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted">
+        {label}
+      </span>
+    </div>
+    <span className={cn("text-3xl font-bold leading-none", colorStyles[color])}>{value}</span>
   </div>
 );
 
