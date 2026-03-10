@@ -3,7 +3,6 @@ import {
   PageHeader,
   StatsRow,
   StatCard,
-  ActionsBar,
   PrimaryButton,
   Alert,
 } from "@/components/ui";
@@ -14,11 +13,11 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
-  ChevronDown,
-  ChevronRight,
   Loader2,
   ShieldCheck,
   Layers,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -35,8 +34,8 @@ import {
 export default function ClassificationAppropriationPage() {
   const [classifications, setClassifications] = useState<ClassificationWithSubs[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -103,14 +102,6 @@ export default function ClassificationAppropriationPage() {
     );
   }, [classifications, search]);
 
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
   function resetDialog() {
     setDialogOpen(false);
     setEditMode(false);
@@ -124,6 +115,16 @@ export default function ClassificationAppropriationPage() {
     setSelectedClassificationId("");
     setClassificationSubDescription("");
     setClassificationDialogOpen(true);
+  }
+
+  const toggleExpanded = (catId: string) => {
+    const newExpanded = new Set(expandedIds);
+    if (newExpanded.has(catId)) {
+      newExpanded.delete(catId);
+    } else {
+      newExpanded.add(catId);
+    }
+    setExpandedIds(newExpanded);
   }
 
   const closeClassificationDialog = () => {
@@ -242,8 +243,20 @@ export default function ClassificationAppropriationPage() {
 
         </StatsRow>
       </div>
-
-      <ActionsBar>
+      <div className="flex items-center justify-between mb-4">
+        <div className="relative w-80">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" />
+            <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <input
+            type="text"
+            className="w-full pl-10 pr-4 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success"
+            placeholder="Search functional classifications..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
         <div className="flex gap-2">
           <PrimaryButton onClick={openAddClassification}>
             <Plus className="w-4 h-4" />
@@ -254,144 +267,119 @@ export default function ClassificationAppropriationPage() {
             Refresh
           </PrimaryButton>
         </div>
-      </ActionsBar>
+      </div>
 
-      <div className="bg-surface border border-border rounded-2xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Functional Classifications</h2>
-            <p className="text-sm text-foreground/70">Browse each functional category and expand to review its sub-classifications.</p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="relative w-80">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" viewBox="0 0 24 24" fill="none">
-                <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2" />
-                <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <input
-                type="text"
-                className="w-full pl-10 pr-4 py-2 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success"
-                placeholder="Search functional classifications..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-            <p className="text-xs text-muted">
-              Search by classification or sub-classification description.
-            </p>
-          </div>
-        </div>
-
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
         {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-muted" />
-            <span className="ml-2 text-sm text-muted">Loading classifications...</span>
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            <span className="ml-2 text-sm text-slate-500">Loading classifications...</span>
           </div>
         )}
 
-        {!loading && (
-          <div className="grid gap-4">
-            {filtered.length === 0 && (
-              <p className="text-center text-muted py-8">No classifications found.</p>
-            )}
-            {filtered.map((cat) => {
-              const isExpanded = expandedIds.has(cat.id);
-              return (
-                <section
-                  key={cat.id}
-                  className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition hover:shadow-md"
+        {!loading && filtered.length === 0 && (
+          <p className="text-center text-slate-400 py-12 text-sm">No classifications found.</p>
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <>
+            {/* Table header */}
+            <div className="grid grid-cols-[3rem_1fr_6rem_7rem_auto] gap-4 px-6 py-4 bg-gradient-to-r from-slate-900 to-slate-800 border-b border-slate-300 sticky top-0 z-10">
+              <span />
+              <span className="text-xs font-black uppercase tracking-widest text-white">Classification</span>
+              <span className="text-xs font-black uppercase tracking-widest text-white text-center">Items</span>
+              <span className="text-xs font-black uppercase tracking-widest text-white text-center">Status</span>
+              <span />
+            </div>
+
+            {/* Classification entries - always expanded */}
+            {filtered.map((cat, idx) => (
+              <div key={cat.id}>
+                {/* Main classification row */}
+                <div
+                  className={cn(
+                    "grid grid-cols-[3rem_1fr_6rem_7rem_auto] gap-4 items-center px-6 py-4 border-b border-slate-100 hover:bg-blue-50/40 transition-all duration-200 cursor-pointer group",
+                    idx === 0 ? "border-t border-slate-100" : "",
+                    idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"
+                  )}
+                  onClick={() => cat.subClassifications.length > 0 && toggleExpanded(cat.id)}
                 >
-                  {(() => {
-                    const headerGradientClasses = cat.status
-                      ? "border-success/30 bg-gradient-to-r from-emerald-50 via-success/20 to-white"
-                      : "border-danger/30 bg-gradient-to-r from-red-50 via-danger/20 to-white"
-                    const ribbonGradient = cat.status ? "from-success to-emerald-400" : "from-danger to-rose-500"
-                    return (
-                      <div className={`relative border-b ${headerGradientClasses}`}>
-                        <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${ribbonGradient}`} />
-                        <div
-                          className="relative flex items-center gap-3 px-4 py-4 cursor-pointer select-none"
-                          onClick={() => toggleExpand(cat.id)}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className={cn("w-5 h-5", cat.status ? "text-success" : "text-danger")} />
-                          ) : (
-                            <ChevronRight className={cn("w-5 h-5", cat.status ? "text-success" : "text-danger/70")} />
-                          )}
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-foreground">{cat.description}</p>
-                            <p className="text-xs text-foreground/70">
-                              {cat.subClassifications.length} sub-classification{cat.subClassifications.length === 1 ? '' : 's'}
-                            </p>
-                          </div>
-                          <span
-                            className={cn(
-                              "px-3 py-1 rounded-full text-xs font-semibold transition",
-                              cat.status ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
-                            )}
+                  <button
+                    className="flex items-center justify-center text-slate-500 group-hover:text-slate-700 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cat.subClassifications.length > 0 && toggleExpanded(cat.id);
+                    }}
+                  >
+                    {cat.subClassifications.length > 0 ? (
+                      expandedIds.has(cat.id) ? (
+                        <ChevronDown className="w-5 h-5 transition-transform" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 transition-transform" />
+                      )
+                    ) : null}
+                  </button>
+                  <span className="text-sm font-semibold text-slate-900 group-hover:text-slate-950 transition-colors">{cat.description}</span>
+                  <span className="text-center text-xs font-bold text-slate-600 tabular-nums">{cat.subClassifications.length}</span>
+                  <div className="text-center">
+                    <span className={cn(
+                      "inline-block px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
+                      cat.status
+                        ? "bg-emerald-100/80 text-emerald-700 group-hover:bg-emerald-100"
+                        : "bg-slate-200/80 text-slate-600 group-hover:bg-slate-200"
+                    )}>
+                      {cat.status ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <span />
+                </div>
+
+                {/* Sub-classifications - conditionally visible */}
+                {expandedIds.has(cat.id) && cat.subClassifications.length > 0 && (
+                  <div className="bg-slate-50/60 border-t border-slate-100">
+                    {/* Sub-items */}
+                    {cat.subClassifications.map((sub, subIdx) => (
+                      <div
+                        key={sub.id}
+                        className={cn(
+                          "flex items-center justify-between px-12 py-3.5 border-b border-slate-100 last:border-b-0 hover:bg-blue-50/80 transition-all duration-150 group/item",
+                          subIdx % 2 === 0 ? "bg-slate-50/20" : "bg-slate-50/50"
+                        )}
+                      >
+                        <span className="text-sm text-slate-800 font-medium min-w-0 flex-1 group-hover/item:text-slate-950">{sub.description}</span>
+                        <div className="flex gap-2 justify-end flex-shrink-0 ml-4 opacity-80 group-hover/item:opacity-100 transition-opacity">
+                          <button
+                            title="Edit"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-semibold text-blue-600 bg-blue-50/80 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-all"
+                            onClick={() => openEditSub(cat.id, sub)}
                           >
-                            {cat.status ? "Active" : "Inactive"}
-                          </span>
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            title="Remove"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-semibold text-red-600 bg-red-50/80 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-all"
+                            onClick={() => handleDeleteSub(sub.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove
+                          </button>
                         </div>
                       </div>
-                    )
-                  })()}
+                    ))}
+                  </div>
+                )}
 
-                  {isExpanded && (
-                    <div className="divide-y divide-border/60">
-                      {cat.subClassifications.length === 0 && (
-                        <p className="text-sm text-muted px-4 py-3">No sub-classifications yet.</p>
-                      )}
-                      {cat.subClassifications.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className={cn(
-                            "flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-foreground transition",
-                            sub.status ? "border-success/20" : "border-danger/20",
-                            "rounded-b-2xl border border-transparent hover:border-border/60 hover:bg-background/50",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full",
-                              sub.status ? "bg-success" : "bg-danger",
-                            )}
-                          />
-                          <span className="flex-1 font-medium">{sub.description}</span>
-                          <span
-                            className={cn(
-                              "text-[10px] px-2 py-1 rounded-full font-semibold",
-                              sub.status ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
-                            )}
-                          >
-                            {sub.status ? "Active" : "Inactive"}
-                          </span>
-                          <div className="flex gap-2">
-                            <button
-                              title="Edit"
-                              className="flex items-center gap-1 rounded-full border border-border/70 px-3 py-1 text-xs text-blue-600 hover:bg-blue-500/10"
-                              onClick={() => openEditSub(cat.id, sub)}
-                            >
-                              <Pencil className="w-4 h-4" />
-                              Edit
-                            </button>
-                            <button
-                              title="Delete"
-                              className="flex items-center gap-1 rounded-full border border-border/70 px-3 py-1 text-xs text-danger hover:bg-danger/10"
-                              onClick={() => handleDeleteSub(sub.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+                {cat.subClassifications.length === 0 && (
+                  <div className="px-6 py-3 bg-slate-50/40 border-b border-slate-200 text-xs italic text-slate-500">
+                    — No line items recorded
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Ledger footer with totals */}
+            </>
         )}
       </div>
 
