@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   fetchEstimateIncomeCategories,
   fetchFullEstimateEntries,
@@ -10,9 +10,11 @@ import {
   type CreateFullEstimatePayload,
 } from '@/services/accountingService'
 import { Plus, Search, DollarSign, Layers, FolderTree, Filter } from 'lucide-react'
-import { PageHeader, ActionsBar, PrimaryButton, StatsRow, StatCard } from '@/components/ui'
+import { PageHeader, ActionsBar, PrimaryButton, StatsRow, StatCard, Alert } from '@/components/ui'
 import EstimateIncomeDialog, { type UpdateEstimatePayload } from '../components/EstimateIncomeDialog'
 import EstimateIncomeTable from '../components/EstimateIncomeTable'
+
+type ToastState = { variant: 'success' | 'error' | 'info' | 'warning'; title: string; message: string } | null
 
 export default function EstimateIncomePage() {
   const [categories, setCategories] = useState<EstimateIncome[]>([])
@@ -22,6 +24,12 @@ export default function EstimateIncomePage() {
   const [editData, setEditData] = useState<FullEstimateEntry | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [toast, setToast] = useState<ToastState>(null)
+
+  const showToast = useCallback((variant: ToastState extends null ? never : NonNullable<ToastState>['variant'], title: string, message: string) => {
+    setToast({ variant, title, message })
+    setTimeout(() => setToast(null), 3500)
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -38,7 +46,7 @@ export default function EstimateIncomePage() {
       setEntries(fullEntries)
     } catch (error) {
       console.error('Failed to load data:', error)
-      alert('Failed to load data. Please try again.')
+      showToast('error', 'Load Failed', 'Failed to load data. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -60,10 +68,10 @@ export default function EstimateIncomePage() {
       setLoading(true)
       await deleteFullEstimateEntry(item.source_of_income_id)
       await loadData()
-      alert('Deleted successfully!')
+      showToast('success', 'Deleted', 'Entry removed successfully.')
     } catch (error) {
       console.error('Failed to delete:', error)
-      alert('Failed to delete. Please try again.')
+      showToast('error', 'Delete Failed', 'Failed to delete. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -73,12 +81,12 @@ export default function EstimateIncomePage() {
     try {
       setLoading(true)
       await createFullEstimateEntry(data)
-      alert('Added successfully!')
       setDialogOpen(false)
       await loadData()
+      showToast('success', 'Added Successfully', 'New income estimate has been created.')
     } catch (error: any) {
       console.error('Failed to save:', error)
-      alert(error?.message || 'Failed to save. Please try again.')
+      showToast('error', 'Save Failed', error?.message || 'Failed to save. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -88,12 +96,12 @@ export default function EstimateIncomePage() {
     try {
       setLoading(true)
       await updateFullEstimateEntry(data)
-      alert('Updated successfully!')
       setDialogOpen(false)
       await loadData()
+      showToast('success', 'Updated Successfully', 'Income estimate has been updated.')
     } catch (error: any) {
       console.error('Failed to update:', error)
-      alert(error?.message || 'Failed to update. Please try again.')
+      showToast('error', 'Update Failed', error?.message || 'Failed to update. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -211,6 +219,16 @@ export default function EstimateIncomePage() {
         editData={editData}
         isLoading={loading}
       />
+
+      {/* Toast Notification */}
+      {toast && (
+        <Alert
+          variant={toast.variant}
+          title={toast.title}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   )
 }
