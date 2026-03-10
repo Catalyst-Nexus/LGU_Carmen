@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   fetchEstimateIncomeCategories,
   fetchFullEstimateEntries,
@@ -9,7 +9,8 @@ import {
   type FullEstimateEntry,
   type CreateFullEstimatePayload,
 } from '@/services/accountingService'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, DollarSign, Layers, FolderTree, Filter } from 'lucide-react'
+import { PageHeader, ActionsBar, PrimaryButton, StatsRow, StatCard } from '@/components/ui'
 import EstimateIncomeDialog, { type UpdateEstimatePayload } from '../components/EstimateIncomeDialog'
 import EstimateIncomeTable from '../components/EstimateIncomeTable'
 
@@ -110,51 +111,85 @@ export default function EstimateIncomePage() {
     return matchesSearch && matchesCategory
   })
 
+  // Stats
+  const stats = useMemo(() => {
+    const uniqueSources = new Set(entries.map((e) => e.source_of_income_id)).size
+    const uniqueRevenue = new Set(entries.filter((e) => e.revenue_account_id).map((e) => e.revenue_account_id)).size
+    return { total: entries.length, uniqueSources, uniqueRevenue, categories: categories.length }
+  }, [entries, categories])
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Estimates of Income</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage revenue estimates from local and external sources
-          </p>
-        </div>
-        <button
-          onClick={handleAdd}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-success rounded-lg hover:bg-success/90 disabled:opacity-50"
-        >
-          <Plus className="w-4 h-4" />
-          Add Estimate
-        </button>
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Estimates of Income"
+          subtitle="Manage revenue estimates from local and external sources"
+          icon={<DollarSign className="w-6 h-6" />}
+        />
+        <ActionsBar>
+          <PrimaryButton onClick={handleAdd} disabled={loading}>
+            <Plus className="w-4 h-4" />
+            Add Estimate
+          </PrimaryButton>
+        </ActionsBar>
       </div>
 
+      {/* Summary Cards */}
+      <StatsRow>
+        <StatCard
+          label="Total Entries"
+          value={stats.total}
+          color="primary"
+          icon={<Layers className="w-4 h-4" />}
+        />
+        <StatCard
+          label="Income Sources"
+          value={stats.uniqueSources}
+          color="success"
+          icon={<FolderTree className="w-4 h-4" />}
+        />
+        <StatCard
+          label="Revenue Accounts"
+          value={stats.uniqueRevenue}
+          color="warning"
+          icon={<DollarSign className="w-4 h-4" />}
+        />
+        <StatCard
+          label="Source Types"
+          value={stats.categories}
+          color="danger"
+          icon={<Filter className="w-4 h-4" />}
+        />
+      </StatsRow>
+
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search by description, source type, or revenue..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:border-success"
-          />
+      <div className="bg-surface border border-border rounded-2xl p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted" />
+            <input
+              type="text"
+              placeholder="Search by description, source type, or revenue..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success transition-colors"
+            />
+          </div>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            aria-label="Filter by source category"
+            className="px-4 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success min-w-[180px] transition-colors"
+          >
+            <option value="all">All Sources</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.description}
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          aria-label="Filter by source category"
-          className="px-4 py-2 border border-border rounded-lg text-sm bg-background focus:outline-none focus:border-success"
-        >
-          <option value="all">All Sources</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.description}
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Table */}
