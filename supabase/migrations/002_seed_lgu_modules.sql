@@ -22,7 +22,8 @@ VALUES
   ('Payroll Register',      '/hr-payroll/register',    'modules/hr-payroll/pages/PayrollRegister',    'HR & PAYROLL', 'FileSpreadsheet', true),
   ('LDDAP Generator',       '/hr-payroll/lddap',       'modules/hr-payroll/pages/LDDAPGenerator',     'HR & PAYROLL', 'FileOutput',      true),
   ('Remittance Reports',    '/hr-payroll/remittance',  'modules/hr-payroll/pages/RemittanceReports',  'HR & PAYROLL', 'Send',            true),
-  ('Time Clock',            '/hr-payroll/time-clock',  'modules/hr-payroll/pages/TimeClock',          'HR & PAYROLL', 'Camera',          true)
+  ('Time Clock',            '/hr-payroll/time-clock',  'modules/hr-payroll/pages/TimeClock',          'HR & PAYROLL', 'Camera',          true),
+  ('Salary Schedule',       '/hr-payroll/salary-schedule', 'modules/hr-payroll/pages/SalarySchedule', 'HR & PAYROLL', 'DollarSign',      true)
 ON CONFLICT (route_path) DO UPDATE
   SET module_name = EXCLUDED.module_name,
       file_path   = EXCLUDED.file_path,

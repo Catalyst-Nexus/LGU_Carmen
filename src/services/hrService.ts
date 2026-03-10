@@ -15,6 +15,10 @@ export interface Position {
 export interface SalaryRate {
   id: string;
   description: string;
+  sg_number: number | null;
+  step: number | null;
+  amount: number;
+  is_perday: boolean;
 }
 
 export interface PositionType {
@@ -99,7 +103,9 @@ export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("salary_rate")
-    .select("id, description")
+    .select(
+      "id, description, is_perday, rate:rate_id ( amount, sg_number, step )",
+    )
     .eq("is_active", true)
     .order("description");
 
@@ -108,7 +114,78 @@ export const fetchSalaryRates = async (): Promise<SalaryRate[]> => {
     return [];
   }
 
-  return data || [];
+  return (data || []).map((row: Record<string, unknown>) => {
+    const rate = Array.isArray(row.rate) ? row.rate[0] : row.rate;
+    return {
+      id: row.id as string,
+      description: row.description as string,
+      sg_number:
+        ((rate as Record<string, unknown>)?.sg_number as number | null) ?? null,
+      step: ((rate as Record<string, unknown>)?.step as number | null) ?? null,
+      amount: Number((rate as Record<string, unknown>)?.amount ?? 0),
+      is_perday: row.is_perday as boolean,
+    };
+  });
+};
+
+export interface RateRow {
+  id: string;
+  description: string;
+  amount: number;
+  sg_number: number | null;
+  step: number | null;
+}
+
+/**
+ * Fetch all rows from hr.rate (the raw amount table)
+ */
+export const fetchRates = async (): Promise<RateRow[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("rate")
+    .select("id, description, amount, sg_number, step")
+    .order("sg_number")
+    .order("step");
+
+  if (error) {
+    console.error("Error fetching rates:", error);
+    return [];
+  }
+
+  return (data || []).map((r) => ({
+    id: r.id as string,
+    description: r.description as string,
+    amount: Number(r.amount),
+    sg_number: r.sg_number as number | null,
+    step: r.step as number | null,
+  }));
+};
+
+/**
+ * Update a rate amount in hr.rate
+ */
+export const updateRate = async (
+  id: string,
+  amount: number,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("rate")
+    .update({ amount })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error updating rate:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
 };
 
 /**
@@ -228,11 +305,28 @@ export interface PlantillaPositionFormData {
   sr_id: string;
   pt_id: string;
   o_id: string;
+  authorization: string;
   is_filled: boolean;
+  slots?: number;
 }
 
 /**
- * Create a new position in hr.position table
+ * Parse an item_no like "MO-003" into { prefix: "MO", num: 3, padLength: 3 }.
+ * Returns null if the format doesn't match.
+ */
+const parseItemNo = (itemNo: string) => {
+  const lastDash = itemNo.lastIndexOf("-");
+  if (lastDash === -1) return null;
+  const prefix = itemNo.substring(0, lastDash);
+  const numStr = itemNo.substring(lastDash + 1);
+  const num = parseInt(numStr, 10);
+  if (isNaN(num) || !prefix) return null;
+  return { prefix, num, padLength: numStr.length };
+};
+
+/**
+ * Create one or more positions in hr.position table.
+ * When slots > 1, auto-generates sequential item numbers from the base item_no.
  */
 export const createPosition = async (
   positionData: PlantillaPositionFormData,
@@ -241,10 +335,33 @@ export const createPosition = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
+  const slots = positionData.slots ?? 1;
+  const { slots: _, ...baseData } = positionData;
+  void _;
+
+  const rows: Omit<PlantillaPositionFormData, "slots">[] = [];
+
+  if (slots <= 1) {
+    rows.push(baseData);
+  } else {
+    const parsed = parseItemNo(baseData.item_no);
+    if (!parsed) {
+      return {
+        success: false,
+        error:
+          "Item No. must follow the format PREFIX-NUMBER (e.g., MO-001) when creating multiple slots.",
+      };
+    }
+    for (let i = 0; i < slots; i++) {
+      const seq = String(parsed.num + i).padStart(parsed.padLength, "0");
+      rows.push({ ...baseData, item_no: `${parsed.prefix}-${seq}` });
+    }
+  }
+
   const { error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("position")
-    .insert([positionData]);
+    .insert(rows);
 
   if (error) {
     console.error("Error creating position:", error);
@@ -345,6 +462,57 @@ export const fetchLeaveSubtypes = async (): Promise<LeaveSubtype[]> => {
 };
 
 /**
+ * Fetch all leave applications from hr.personnel_leave_out
+ */
+export const fetchLeaveApplications = async () => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("personnel_leave_out")
+    .select(
+      `
+      id, per_id, los_id, applied_date, credits, status, remarks, created_at,
+      personnel:per_id ( first_name, last_name ),
+      leave_out_subtype:los_id ( code, description )
+    `,
+    )
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error("Error fetching leave applications:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const personnel = row.personnel as
+      | Record<string, string>[]
+      | Record<string, string>
+      | null;
+    const leaveSubtype = row.leave_out_subtype as
+      | Record<string, string>[]
+      | Record<string, string>
+      | null;
+    const per = Array.isArray(personnel) ? personnel[0] : personnel;
+    const sub = Array.isArray(leaveSubtype) ? leaveSubtype[0] : leaveSubtype;
+    return {
+      id: row.id,
+      employee_id: row.per_id,
+      employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
+      leave_type: (sub?.code ?? "—") as string,
+      date_from: row.applied_date,
+      date_to: row.applied_date,
+      days: Number(row.credits) || 0,
+      reason: row.remarks,
+      status: row.status,
+      approved_by: null,
+      created_at: row.created_at,
+    };
+  });
+};
+
+/**
  * Fetch all personnel for leave application dropdown
  */
 export const fetchPersonnelForLeave = async () => {
@@ -362,7 +530,7 @@ export const fetchPersonnelForLeave = async () => {
     return [];
   }
 
-  return (data || []).map((p: any) => ({
+  return (data || []).map((p: Record<string, string>) => ({
     id: p.id,
     name: `${p.last_name}, ${p.first_name} ${p.middle_name || ""}`.trim(),
   }));
@@ -416,7 +584,7 @@ export const updateLeaveApplication = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
-  const updateData: any = {};
+  const updateData: Record<string, string | number> = {};
   if (leaveData.per_id) updateData.per_id = leaveData.per_id;
   if (leaveData.los_id) updateData.los_id = leaveData.los_id;
   if (leaveData.status) updateData.status = leaveData.status;
