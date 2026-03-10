@@ -336,7 +336,8 @@ export const createPosition = async (
   }
 
   const slots = positionData.slots ?? 1;
-  const { slots: _unused, ...baseData } = positionData;
+  const { slots: _, ...baseData } = positionData;
+  void _;
 
   const rows: Omit<PlantillaPositionFormData, "slots">[] = [];
 
@@ -484,11 +485,17 @@ export const fetchLeaveApplications = async () => {
     return [];
   }
 
-  return (data || []).map((row: any) => {
-    const per = Array.isArray(row.personnel) ? row.personnel[0] : row.personnel;
-    const sub = Array.isArray(row.leave_out_subtype)
-      ? row.leave_out_subtype[0]
-      : row.leave_out_subtype;
+  return (data || []).map((row: Record<string, unknown>) => {
+    const personnel = row.personnel as
+      | Record<string, string>[]
+      | Record<string, string>
+      | null;
+    const leaveSubtype = row.leave_out_subtype as
+      | Record<string, string>[]
+      | Record<string, string>
+      | null;
+    const per = Array.isArray(personnel) ? personnel[0] : personnel;
+    const sub = Array.isArray(leaveSubtype) ? leaveSubtype[0] : leaveSubtype;
     return {
       id: row.id,
       employee_id: row.per_id,
@@ -523,7 +530,7 @@ export const fetchPersonnelForLeave = async () => {
     return [];
   }
 
-  return (data || []).map((p: any) => ({
+  return (data || []).map((p: Record<string, string>) => ({
     id: p.id,
     name: `${p.last_name}, ${p.first_name} ${p.middle_name || ""}`.trim(),
   }));
@@ -577,7 +584,7 @@ export const updateLeaveApplication = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
-  const updateData: any = {};
+  const updateData: Record<string, string | number> = {};
   if (leaveData.per_id) updateData.per_id = leaveData.per_id;
   if (leaveData.los_id) updateData.los_id = leaveData.los_id;
   if (leaveData.status) updateData.status = leaveData.status;
