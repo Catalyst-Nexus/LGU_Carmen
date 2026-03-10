@@ -298,14 +298,14 @@ export default function ClassificationAppropriationPage() {
                 {/* Main classification row */}
                 <div
                   className={cn(
-                    "grid grid-cols-[3rem_1fr_6rem_7rem_auto] gap-4 items-center px-6 py-4 border-b border-slate-100 hover:bg-blue-50/40 transition-all duration-200 cursor-pointer group",
+                    "grid grid-cols-[3rem_1fr_6rem_7rem_auto] gap-4 items-center px-6 py-4 border-b border-slate-100 hover:bg-blue-50/60 transition-all duration-200 cursor-pointer group border-l-4 border-l-transparent hover:border-l-blue-500 hover:shadow-sm",
                     idx === 0 ? "border-t border-slate-100" : "",
                     idx % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                   )}
                   onClick={() => cat.subClassifications.length > 0 && toggleExpanded(cat.id)}
                 >
                   <button
-                    className="flex items-center justify-center text-slate-500 group-hover:text-slate-700 transition-all"
+                    className="flex items-center justify-center text-slate-500 group-hover:text-blue-600 transition-all scale-100 group-hover:scale-110"
                     onClick={(e) => {
                       e.stopPropagation();
                       cat.subClassifications.length > 0 && toggleExpanded(cat.id);
@@ -319,14 +319,14 @@ export default function ClassificationAppropriationPage() {
                       )
                     ) : null}
                   </button>
-                  <span className="text-sm font-semibold text-slate-900 group-hover:text-slate-950 transition-colors">{cat.description}</span>
-                  <span className="text-center text-xs font-bold text-slate-600 tabular-nums">{cat.subClassifications.length}</span>
+                  <span className="text-sm font-semibold text-slate-900 group-hover:text-blue-900 transition-colors">{cat.description}</span>
+                  <span className="text-center text-xs font-bold text-slate-600 group-hover:text-slate-800 transition-colors tabular-nums">{cat.subClassifications.length}</span>
                   <div className="text-center">
                     <span className={cn(
-                      "inline-block px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all",
+                      "inline-block px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all transform group-hover:scale-105",
                       cat.status
-                        ? "bg-emerald-100/80 text-emerald-700 group-hover:bg-emerald-100"
-                        : "bg-slate-200/80 text-slate-600 group-hover:bg-slate-200"
+                        ? "bg-emerald-100/80 text-emerald-700 group-hover:bg-emerald-200"
+                        : "bg-slate-200/80 text-slate-600 group-hover:bg-slate-300"
                     )}>
                       {cat.status ? "Active" : "Inactive"}
                     </span>
