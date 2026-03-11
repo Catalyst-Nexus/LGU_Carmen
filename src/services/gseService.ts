@@ -94,6 +94,95 @@ export const fetchSpecs = async (): Promise<Spec[]> => {
   return (data || []).map((r: any) => ({ id: r.s_id, ...r }));
 };
 
+// Fetches catalog specs for a given item from item_spec table.
+export interface ItemSpecDefault {
+  s_id: string;
+  s_code: string;
+  s_description: string;
+  spec_value: string;
+}
+
+export const fetchItemSpecs = async (
+  i_id: string,
+): Promise<ItemSpecDefault[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("item_spec")
+    .select("s_id, spec_value, specs:s_id(s_code, description)")
+    .eq("i_id", i_id);
+  if (error) {
+    console.error("Error fetching item specs:", error);
+    return [];
+  }
+  return ((data as any[]) || []).map((row) => {
+    const spec = Array.isArray(row.specs) ? row.specs[0] : row.specs;
+    return {
+      s_id: row.s_id,
+      s_code: spec?.s_code ?? "",
+      s_description: spec?.description ?? "",
+      spec_value: row.spec_value ?? "",
+    };
+  });
+};
+
+// Returns the most-recent specifications JSON string keyed by item description.
+// Used to auto-fill specs when an item is re-selected in a new PR line.
+export const fetchItemSpecHistory = async (): Promise<
+  Record<string, string | null>
+> => {
+  if (!isSupabaseConfigured() || !supabase) return {};
+  const { data } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("purchase_request_list")
+    .select("specifications, items:i_id(description)")
+    .order("created_at", { ascending: false });
+  const map: Record<string, string | null> = {};
+  for (const row of (data as any[]) || []) {
+    const desc = (Array.isArray(row.items) ? row.items[0] : row.items)
+      ?.description as string | undefined;
+    if (desc && !(desc in map)) {
+      map[desc] = row.specifications || null;
+    }
+  }
+  return map;
+};
+
+// Returns all previously-used values keyed by spec label.
+// Parses every specifications JSON in purchase_request_list so the value
+// field can suggest options based on what was typed in past entries.
+export const fetchSpecValueHistory = async (): Promise<
+  Record<string, string[]>
+> => {
+  if (!isSupabaseConfigured() || !supabase) return {};
+  const { data } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("purchase_request_list")
+    .select("specifications")
+    .not("specifications", "is", null);
+  const map: Record<string, Set<string>> = {};
+  for (const row of (data as any[]) || []) {
+    try {
+      const parsed = JSON.parse(row.specifications);
+      if (Array.isArray(parsed)) {
+        for (const e of parsed) {
+          const label = String(e.label ?? "").trim();
+          const value = String(e.value ?? "").trim();
+          if (label && value) {
+            if (!map[label]) map[label] = new Set();
+            map[label].add(value);
+          }
+        }
+      }
+    } catch {
+      // ignore non-JSON rows
+    }
+  }
+  const result: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(map)) result[k] = [...v];
+  return result;
+};
+
 // ────────────────────────────────────────────────────────────
 // PURCHASE REQUESTS — header
 // ────────────────────────────────────────────────────────────

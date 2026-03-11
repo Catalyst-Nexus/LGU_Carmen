@@ -105,3 +105,155 @@ export interface PRLineFormData {
   item_description?: string;
   unit_code?: string;
 }
+
+// ── BAC Schema Types ──────────────────────────────────────
+
+export interface Supplier {
+  s_id: string;
+  s_code: string;
+  description: string;
+  address: string | null;
+  contact: string | null;
+  tin: string | null;
+  is_active: boolean;
+}
+
+export interface ModeProcurement {
+  mp_id: string;
+  mp_code: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface DeliveryTerm {
+  dt_id: string;
+  dt_code: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface PaymentTerm {
+  pt_id: string;
+  pt_code: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface Abstract {
+  id: string;
+  a_id: string;
+  a_no: string;
+  a_date: string;
+  mp_id: string;
+  pr_id: string;
+  approved_budget: number;
+  dt_id: string | null;
+  pt_id: string | null;
+  winning_b_id: string | null;
+  status: string;
+  remarks: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined
+  mp_description?: string;
+  pr_no?: string;
+  rc_description?: string;
+}
+
+export interface Bidture {
+  b_id: string;
+  a_id: string;
+  s_id: string;
+  prl_id: string;
+  unit_price_bid: number;
+  unit_total_amount_bid: number;
+  winner_status: boolean;
+  created_at: string;
+  updated_at: string;
+  // joined
+  supplier_name?: string;
+}
+
+export interface AbstractFormData {
+  a_no?: string;
+  a_date: string;
+  mp_id: string;
+  pr_id: string;
+  approved_budget: number;
+  dt_id?: string | null;
+  pt_id?: string | null;
+  status?: string;
+  remarks?: string;
+}
+
+export interface BidtureFormData {
+  a_id: string;
+  s_id: string;
+  prl_id: string;
+  unit_price_bid: number;
+  unit_total_amount_bid: number;
+  winner_status?: boolean;
+}
+
+// ── Purchase Order ──────────────────────────────────────
+
+export interface PurchaseOrder {
+  id: string;
+  po_id: string;
+  po_no: string;
+  po_date: string;
+  a_id: string;
+  place_of_delivery: string | null;
+  date_of_delivery: string | null;
+  days_to_deliver: number | null;
+  pt_id: string | null;
+  dt_id: string | null;
+  po_total_amount: number;
+  status: string;
+  remarks: string | null;
+  issued_by: string | null;
+  received_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined
+  a_no?: string;
+  pr_no?: string;
+  supplier_name?: string;
+  mp_description?: string;
+}
+
+export interface PurchaseOrderLine {
+  pol_id: string;
+  po_id: string;
+  b_id: string;
+  prl_id: string;
+  qty_ordered: number;
+  unit_price: number;
+  pol_total_amount: number;
+  qty_delivered: number;
+  delivery_status: string;
+  created_at: string;
+  updated_at: string;
+  // joined
+  item_description?: string;
+  item_code?: string;
+  unit_code?: string;
+  qty?: number;
+  specifications?: string | null;
+}
+
+export interface PurchaseOrderFormData {
+  po_no?: string;
+  po_date: string;
+  a_id: string;
+  place_of_delivery?: string;
+  date_of_delivery?: string;
+  days_to_deliver?: number | null;
+  pt_id?: string | null;
+  dt_id?: string | null;
+  po_total_amount?: number;
+  status?: string;
+  remarks?: string;
+  issued_by?: string;
+  received_by?: string;
+}

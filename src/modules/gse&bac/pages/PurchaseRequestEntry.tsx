@@ -48,12 +48,17 @@ import {
   fetchItems,
   fetchUnits,
   fetchSpecs,
+  fetchItemSpecHistory,
+  fetchItemSpecs,
+  fetchSpecValueHistory,
 } from "@/services/gseService";
+import type { ItemSpecDefault } from "@/services/gseService";
 
 type ViewMode = "list" | "form";
 
 type SpecEntry = {
   id: string;
+  s_id?: string; // links to specs.s_id when selected from catalog
   label: string;
   value: string;
 };
@@ -165,6 +170,27 @@ const PurchaseRequestEntry = () => {
   const [allUnits, setAllUnits] = useState<Unit[]>([]);
   const [allSpecs, setAllSpecs] = useState<Spec[]>([]);
 
+  // ─── Item spec history (description → most-recent specs JSON) ──
+  const [itemSpecHistory, setItemSpecHistory] = useState<
+    Record<string, string | null>
+  >({});
+  // Catalog specs per item i_id → [{s_id, s_description, spec_value}]
+  const [itemDefaultSpecs, setItemDefaultSpecs] = useState<
+    Record<string, ItemSpecDefault[]>
+  >({});
+  // Which row's item suggestion dropdown is open
+  const [suggestionRowId, setSuggestionRowId] = useState<string | null>(null);
+  // Which spec entry's label suggestion is open ("rowLocalId:entryId")
+  const [specSuggestionKey, setSpecSuggestionKey] = useState<string | null>(
+    null,
+  );
+  // spec label → all previously used values (from past PR lines)
+  const [specValueHistory, setSpecValueHistory] = useState<
+    Record<string, string[]>
+  >({});
+  // Which spec entry's value dropdown is open ("rowLocalId:entryId")
+  const [specValueKey, setSpecValueKey] = useState<string | null>(null);
+
   // ─── Quick-add department / section ────────────────────
   const [showAddDept, setShowAddDept] = useState(false);
   const [addDeptName, setAddDeptName] = useState("");
@@ -242,18 +268,23 @@ const PurchaseRequestEntry = () => {
 
   const openForm = async (pr?: PurchaseRequest) => {
     // Load all lookups in parallel
-    const [rc, items, units, specs] = await Promise.all([
-      centers.length === 0
-        ? fetchResponsibilityCenters()
-        : Promise.resolve(centers),
-      fetchItems(),
-      fetchUnits(),
-      fetchSpecs(),
-    ]);
+    const [rc, items, units, specs, specHistory, specValHistory] =
+      await Promise.all([
+        centers.length === 0
+          ? fetchResponsibilityCenters()
+          : Promise.resolve(centers),
+        fetchItems(),
+        fetchUnits(),
+        fetchSpecs(),
+        fetchItemSpecHistory(),
+        fetchSpecValueHistory(),
+      ]);
     if (centers.length === 0) setCenters(rc);
     setAllItems(items);
     setAllUnits(units);
     setAllSpecs(specs);
+    setItemSpecHistory(specHistory);
+    setSpecValueHistory(specValHistory);
 
     if (pr) {
       setEditingPR(pr);
@@ -277,6 +308,22 @@ const PurchaseRequestEntry = () => {
         unit_code: l.unit_code || "",
       }));
       setDraftRows([...rows, emptyRow()]);
+      // Pre-load catalog specs for all items in this PR
+      const uniqueIIds = [
+        ...new Set(loadedLines.map((l) => l.i_id).filter(Boolean)),
+      ];
+      if (uniqueIIds.length > 0) {
+        const results = await Promise.all(
+          uniqueIIds.map((id) => fetchItemSpecs(id)),
+        );
+        setItemDefaultSpecs((prev) => {
+          const next = { ...prev };
+          uniqueIIds.forEach((id, i) => {
+            next[id] = results[i];
+          });
+          return next;
+        });
+      }
     } else {
       setEditingPR(null);
       const nextPrNo = await generateNextPRNumber();
@@ -783,6 +830,17 @@ const PurchaseRequestEntry = () => {
                   row.qty ||
                   row.unitPrice
                 );
+                // Filtered suggestions for this row's autocomplete
+                const q = row.item_description.toLowerCase().trim();
+                const suggestions =
+                  suggestionRowId === row.localId
+                    ? (q
+                        ? allItems.filter((it) =>
+                            it.description.toLowerCase().includes(q),
+                          )
+                        : allItems
+                      ).slice(0, 10)
+                    : [];
                 return (
                   <tr key={row.localId} className="border-b border-gray-300">
                     <td className="border-r border-gray-800 px-2 py-1 text-center align-top text-xs">
@@ -823,44 +881,86 @@ const PurchaseRequestEntry = () => {
                       </select>
                     </td>
                     <td className="border-r border-gray-800 px-1 py-1 align-top">
-                      <input
-                        type="text"
-                        list={`items-list-${row.localId}`}
-                        className="w-full text-xs bg-transparent border-0 border-b border-transparent focus:border-gray-500 py-0.5 focus:outline-none font-semibold"
-                        placeholder="Item description"
-                        value={row.item_description}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const matched = allItems.find(
-                            (it) => it.description === val,
-                          );
-                          if (matched) {
-                            const defUnit = allUnits.find(
-                              (u) => u.id === matched.default_u_id,
-                            );
+                      {/* ── Item description autocomplete ── */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          className="w-full text-xs bg-transparent border-0 border-b border-transparent focus:border-gray-500 py-0.5 focus:outline-none font-semibold"
+                          placeholder="Item description"
+                          value={row.item_description}
+                          onFocus={() => setSuggestionRowId(row.localId)}
+                          onBlur={() =>
+                            setTimeout(() => setSuggestionRowId(null), 150)
+                          }
+                          onChange={(e) => {
                             updateDraftRow(row.localId, {
-                              item_description: val,
-                              i_id: matched.id,
-                              ...(defUnit
-                                ? {
-                                    u_id: defUnit.id,
-                                    unit_code: defUnit.u_code,
-                                  }
-                                : {}),
-                            });
-                          } else {
-                            updateDraftRow(row.localId, {
-                              item_description: val,
+                              item_description: e.target.value,
                               i_id: "",
                             });
-                          }
-                        }}
-                      />
-                      <datalist id={`items-list-${row.localId}`}>
-                        {allItems.map((it) => (
-                          <option key={it.id} value={it.description} />
-                        ))}
-                      </datalist>
+                            setSuggestionRowId(row.localId);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setSuggestionRowId(null);
+                          }}
+                        />
+                        {suggestions.length > 0 && (
+                          <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-44 overflow-y-auto w-full min-w-max">
+                            {suggestions.map((it) => {
+                              const hasSpecs =
+                                !!itemSpecHistory[it.description];
+                              return (
+                                <button
+                                  key={it.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 flex items-center gap-2"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    const defUnit = allUnits.find(
+                                      (u) => u.id === it.default_u_id,
+                                    );
+                                    const rawSpecs =
+                                      itemSpecHistory[it.description];
+                                    const specEntries = rawSpecs
+                                      ? parseSpecEntries(rawSpecs)
+                                      : [];
+                                    updateDraftRow(row.localId, {
+                                      item_description: it.description,
+                                      i_id: it.id,
+                                      specEntries,
+                                      ...(defUnit
+                                        ? {
+                                            u_id: defUnit.id,
+                                            unit_code: defUnit.u_code,
+                                          }
+                                        : {}),
+                                    });
+                                    setSuggestionRowId(null);
+                                    // Lazily load catalog specs for this item
+                                    if (!itemDefaultSpecs[it.id]) {
+                                      fetchItemSpecs(it.id).then((s) =>
+                                        setItemDefaultSpecs((prev) => ({
+                                          ...prev,
+                                          [it.id]: s,
+                                        })),
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <span className="flex-1">
+                                    {it.description}
+                                  </span>
+                                  {hasSpecs && (
+                                    <span className="text-[9px] text-blue-400 shrink-0">
+                                      has specs
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
 
                       {/* ── Structured specs editor ───── */}
                       {row.specEntries.length > 0 && (
@@ -868,49 +968,174 @@ const PurchaseRequestEntry = () => {
                           <span className="text-[9px] text-gray-400 uppercase tracking-wide font-semibold">
                             Specs:
                           </span>
-                          {row.specEntries.map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="flex items-start gap-1 mt-1 group"
-                            >
-                              {/* Bold label input */}
-                              <input
-                                list="specs-datalist"
-                                value={entry.label}
-                                placeholder="Spec name"
-                                className="text-[11px] font-bold bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none w-[38%] min-w-0"
-                                onChange={(e) =>
-                                  updateSpecEntryInRow(row.localId, entry.id, {
-                                    label: e.target.value,
-                                  })
-                                }
-                              />
-                              <span className="text-[11px] font-bold shrink-0 mt-0.5">
-                                :
-                              </span>
-                              {/* Value input */}
-                              <input
-                                value={entry.value}
-                                placeholder="value"
-                                className="text-[11px] flex-1 bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none min-w-0 text-gray-700"
-                                onChange={(e) =>
-                                  updateSpecEntryInRow(row.localId, entry.id, {
-                                    value: e.target.value,
-                                  })
-                                }
-                              />
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeSpecEntryFromRow(row.localId, entry.id)
-                                }
-                                className="text-gray-300 hover:text-red-500 text-xs leading-none opacity-0 group-hover:opacity-100 shrink-0 print:hidden"
-                                title="Remove spec row"
+                          {row.specEntries.map((entry) => {
+                            const skKey = `${row.localId}:${entry.id}`;
+                            const catalogSpecs =
+                              itemDefaultSpecs[row.i_id] || [];
+                            const specQ = entry.label.toLowerCase();
+                            const specSuggestions = allSpecs
+                              .filter(
+                                (s) =>
+                                  !specQ ||
+                                  s.description.toLowerCase().includes(specQ),
+                              )
+                              .slice(0, 10);
+                            // Previously used values for this spec label
+                            const pastValues =
+                              specValueHistory[entry.label] || [];
+                            const valueQ = entry.value.toLowerCase();
+                            const valueSuggestions = pastValues.filter(
+                              (v) =>
+                                !valueQ || v.toLowerCase().includes(valueQ),
+                            );
+                            return (
+                              <div
+                                key={entry.id}
+                                className="flex items-start gap-1 mt-1 group"
                               >
-                                ×
-                              </button>
-                            </div>
-                          ))}
+                                {/* Spec label with autocomplete */}
+                                <div className="relative w-[38%] min-w-0">
+                                  <input
+                                    autoComplete="off"
+                                    value={entry.label}
+                                    placeholder="Spec name"
+                                    className="text-[11px] font-bold bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none w-full"
+                                    onFocus={() => setSpecSuggestionKey(skKey)}
+                                    onBlur={() =>
+                                      setTimeout(
+                                        () => setSpecSuggestionKey(null),
+                                        150,
+                                      )
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape")
+                                        setSpecSuggestionKey(null);
+                                    }}
+                                    onChange={(e) => {
+                                      updateSpecEntryInRow(
+                                        row.localId,
+                                        entry.id,
+                                        {
+                                          label: e.target.value,
+                                          s_id: undefined,
+                                        },
+                                      );
+                                      setSpecSuggestionKey(skKey);
+                                    }}
+                                  />
+                                  {specSuggestionKey === skKey &&
+                                    specSuggestions.length > 0 && (
+                                      <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto w-max min-w-full">
+                                        {specSuggestions.map((s) => {
+                                          const defaultVal =
+                                            catalogSpecs.find(
+                                              (d) => d.s_id === s.id,
+                                            )?.spec_value ?? "";
+                                          return (
+                                            <button
+                                              key={s.id}
+                                              type="button"
+                                              className="w-full text-left px-2 py-1 text-[11px] hover:bg-blue-50 flex items-center gap-2"
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                updateSpecEntryInRow(
+                                                  row.localId,
+                                                  entry.id,
+                                                  {
+                                                    s_id: s.id,
+                                                    label: s.description,
+                                                    value: defaultVal,
+                                                  },
+                                                );
+                                                setSpecSuggestionKey(null);
+                                              }}
+                                            >
+                                              <span className="font-semibold flex-1">
+                                                {s.description}
+                                              </span>
+                                              {defaultVal && (
+                                                <span className="text-[9px] text-gray-400 shrink-0">
+                                                  {defaultVal}
+                                                </span>
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                </div>
+                                <span className="text-[11px] font-bold shrink-0 mt-0.5">
+                                  :
+                                </span>
+                                {/* Value input with history suggestions */}
+                                <div className="relative flex-1 min-w-0">
+                                  <input
+                                    autoComplete="off"
+                                    value={entry.value}
+                                    placeholder="value"
+                                    className="text-[11px] w-full bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none text-gray-700"
+                                    onFocus={() => setSpecValueKey(skKey)}
+                                    onBlur={() =>
+                                      setTimeout(
+                                        () => setSpecValueKey(null),
+                                        150,
+                                      )
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape")
+                                        setSpecValueKey(null);
+                                    }}
+                                    onChange={(e) => {
+                                      updateSpecEntryInRow(
+                                        row.localId,
+                                        entry.id,
+                                        {
+                                          value: e.target.value,
+                                        },
+                                      );
+                                      setSpecValueKey(skKey);
+                                    }}
+                                  />
+                                  {specValueKey === skKey &&
+                                    valueSuggestions.length > 0 && (
+                                      <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-36 overflow-y-auto min-w-[110px] w-max">
+                                        {valueSuggestions.map((v) => (
+                                          <button
+                                            key={v}
+                                            type="button"
+                                            className="w-full text-left px-2 py-1 text-[11px] hover:bg-blue-50"
+                                            onMouseDown={(e) => {
+                                              e.preventDefault();
+                                              updateSpecEntryInRow(
+                                                row.localId,
+                                                entry.id,
+                                                { value: v },
+                                              );
+                                              setSpecValueKey(null);
+                                            }}
+                                          >
+                                            {v}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeSpecEntryFromRow(
+                                      row.localId,
+                                      entry.id,
+                                    )
+                                  }
+                                  className="text-gray-300 hover:text-red-500 text-xs leading-none opacity-0 group-hover:opacity-100 shrink-0 print:hidden"
+                                  title="Remove spec row"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                       <button
