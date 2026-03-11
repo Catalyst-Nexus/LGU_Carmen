@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   PageHeader,
-  StatsRow,
-  StatCard,
   ActionsBar,
   PrimaryButton,
   DataTable,
@@ -57,12 +55,6 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
   }
 
   return ((data as TimeRecordRow[]) || []).map((row) => {
-    const hasTime = row.in || row.out;
-    let status: AttendanceRecord["status"] = "absent";
-    if (hasTime) {
-      status = row.in && row.out ? "present" : "halfday";
-    }
-
     return {
       id: row.id,
       employee_id: row.per_id,
@@ -77,7 +69,6 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
       time_identifier: (row.time_identifier ?? 1) as 1 | 2,
       total_hours: row.total_hours ?? 0,
       pay_amount: row.pay_amount,
-      status,
       created_at: row.created_at,
     };
   });
@@ -112,28 +103,6 @@ const AttendanceDTR = () => {
         subtitle="Daily Time Record tracking per CSC Memorandum Circular"
         icon={<Clock className="w-6 h-6" />}
       />
-
-      <StatsRow>
-        <StatCard
-          label="Present"
-          value={records.filter((r) => r.status === "present").length}
-          color="success"
-        />
-        <StatCard
-          label="Late"
-          value={records.filter((r) => r.status === "late").length}
-          color="warning"
-        />
-        <StatCard
-          label="Absent"
-          value={records.filter((r) => r.status === "absent").length}
-          color="danger"
-        />
-        <StatCard
-          label="Half Day"
-          value={records.filter((r) => r.status === "halfday").length}
-        />
-      </StatsRow>
 
       <Tabs
         tabs={[
@@ -215,27 +184,6 @@ const AttendanceDTR = () => {
             key: "pay_amount",
             header: "Pay",
             render: (item) => <span>₱{item.pay_amount.toFixed(2)}</span>,
-          },
-          {
-            key: "status",
-            header: "Status",
-            render: (item) => (
-              <span
-                className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                  item.status === "present"
-                    ? "bg-success/10 text-success"
-                    : item.status === "late"
-                      ? "bg-warning/10 text-warning"
-                      : item.status === "absent"
-                        ? "bg-danger/10 text-danger"
-                        : item.status === "holiday"
-                          ? "bg-blue-500/10 text-blue-500"
-                          : "bg-gray-500/10 text-gray-500"
-                }`}
-              >
-                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-              </span>
-            ),
           },
         ]}
         title="Attendance Records"
