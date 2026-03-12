@@ -19,6 +19,8 @@ import {
   Save,
   Send,
   ArrowLeft,
+  History,
+  Eye,
 } from "lucide-react";
 import type {
   PurchaseRequest,
@@ -51,8 +53,10 @@ import {
   fetchItemSpecHistory,
   fetchItemSpecs,
   fetchSpecValueHistory,
+  fetchAllCatalogSpecValues,
+  fetchPreviousPRLinesByItem,
 } from "@/services/gseService";
-import type { ItemSpecDefault } from "@/services/gseService";
+import type { ItemSpecDefault, PreviousPRLine } from "@/services/gseService";
 
 type ViewMode = "list" | "form";
 
@@ -188,8 +192,22 @@ const PurchaseRequestEntry = () => {
   const [specValueHistory, setSpecValueHistory] = useState<
     Record<string, string[]>
   >({});
+  // spec label → all catalog values across all items (from item_spec table)
+  const [catalogSpecValues, setCatalogSpecValues] = useState<
+    Record<string, string[]>
+  >({});
   // Which spec entry's value dropdown is open ("rowLocalId:entryId")
   const [specValueKey, setSpecValueKey] = useState<string | null>(null);
+  // Previous PR lines cache: i_id → PreviousPRLine[]
+  const [prevPRLines, setPrevPRLines] = useState<
+    Record<string, PreviousPRLine[]>
+  >({});
+  // Which row's "previous requests" bar is visible
+  const [showPrevReqRowId, setShowPrevReqRowId] = useState<string | null>(null);
+  // Which row's "previous requests" dropdown is open
+  const [prevSpecsRowId, setPrevSpecsRowId] = useState<string | null>(null);
+  // Loading state for previous PR lines
+  const [loadingPrevLines, setLoadingPrevLines] = useState(false);
 
   // ─── Quick-add department / section ────────────────────
   const [showAddDept, setShowAddDept] = useState(false);
@@ -268,7 +286,7 @@ const PurchaseRequestEntry = () => {
 
   const openForm = async (pr?: PurchaseRequest) => {
     // Load all lookups in parallel
-    const [rc, items, units, specs, specHistory, specValHistory] =
+    const [rc, items, units, specs, specHistory, specValHistory, catalogSpecVals] =
       await Promise.all([
         centers.length === 0
           ? fetchResponsibilityCenters()
@@ -278,6 +296,7 @@ const PurchaseRequestEntry = () => {
         fetchSpecs(),
         fetchItemSpecHistory(),
         fetchSpecValueHistory(),
+        fetchAllCatalogSpecValues(),
       ]);
     if (centers.length === 0) setCenters(rc);
     setAllItems(items);
@@ -285,6 +304,7 @@ const PurchaseRequestEntry = () => {
     setAllSpecs(specs);
     setItemSpecHistory(specHistory);
     setSpecValueHistory(specValHistory);
+    setCatalogSpecValues(catalogSpecVals);
 
     if (pr) {
       setEditingPR(pr);
@@ -552,6 +572,7 @@ const PurchaseRequestEntry = () => {
   // ═══════════════════════════════════════════════════════
 
   if (mode === "form") {
+    const isReadOnly = !!(editingPR && editingPR.status !== "DRAFT");
     const cellBorder = "border border-gray-800";
     const cellPad = "px-3 py-2";
     const labelCls = "text-[10px] text-gray-500 font-medium uppercase";
@@ -637,6 +658,7 @@ const PurchaseRequestEntry = () => {
                     className={inputCls}
                     value={prDate}
                     onChange={(e) => setPrDate(e.target.value)}
+                    disabled={isReadOnly}
                   />
                 </td>
               </tr>
@@ -650,6 +672,7 @@ const PurchaseRequestEntry = () => {
                       className={inputCls + " flex-1"}
                       value={rcId}
                       onChange={(e) => setRcId(e.target.value)}
+                      disabled={isReadOnly}
                     >
                       <option value="">-- Select Department --</option>
                       {centers.map((c) => (
@@ -666,6 +689,7 @@ const PurchaseRequestEntry = () => {
                         setAddDeptName("");
                       }}
                       className="shrink-0 text-green-700 hover:text-green-900"
+                      hidden={isReadOnly}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -720,7 +744,7 @@ const PurchaseRequestEntry = () => {
                       className={inputCls + " flex-1"}
                       value={rcsId}
                       onChange={(e) => setRcsId(e.target.value)}
-                      disabled={!rcId}
+                      disabled={!rcId || isReadOnly}
                     >
                       <option value="">-- None --</option>
                       {sections.map((s) => (
@@ -738,6 +762,7 @@ const PurchaseRequestEntry = () => {
                         setAddSecName("");
                       }}
                       className="shrink-0 text-green-700 hover:text-green-900 disabled:opacity-30"
+                      hidden={isReadOnly}
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -857,6 +882,7 @@ const PurchaseRequestEntry = () => {
                         onChange={(e) =>
                           updateDraftRow(row.localId, { qty: e.target.value })
                         }
+                        disabled={isReadOnly}
                       />
                     </td>
                     <td className="border-r border-gray-800 px-1 py-1 align-top">
@@ -871,6 +897,7 @@ const PurchaseRequestEntry = () => {
                             unit_code: unit?.u_code || "",
                           });
                         }}
+                        disabled={isReadOnly}
                       >
                         <option value="">--</option>
                         {allUnits.map((u) => (
@@ -889,10 +916,18 @@ const PurchaseRequestEntry = () => {
                           className="w-full text-xs bg-transparent border-0 border-b border-transparent focus:border-gray-500 py-0.5 focus:outline-none font-semibold"
                           placeholder="Item description"
                           value={row.item_description}
-                          onFocus={() => setSuggestionRowId(row.localId)}
+                          onFocus={() => !isReadOnly && setSuggestionRowId(row.localId)}
                           onBlur={() =>
                             setTimeout(() => setSuggestionRowId(null), 150)
                           }
+                          onClick={() => {
+                            if (row.i_id && !isReadOnly) {
+                              setShowPrevReqRowId((prev) =>
+                                prev === row.localId ? null : row.localId
+                              );
+                              setPrevSpecsRowId(null);
+                            }
+                          }}
                           onChange={(e) => {
                             updateDraftRow(row.localId, {
                               item_description: e.target.value,
@@ -903,6 +938,7 @@ const PurchaseRequestEntry = () => {
                           onKeyDown={(e) => {
                             if (e.key === "Escape") setSuggestionRowId(null);
                           }}
+                          disabled={isReadOnly}
                         />
                         {suggestions.length > 0 && (
                           <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-44 overflow-y-auto w-full min-w-max">
@@ -962,6 +998,87 @@ const PurchaseRequestEntry = () => {
                         )}
                       </div>
 
+                      {/* ── Previous requests with same item ── */}
+                      {row.i_id && !isReadOnly && showPrevReqRowId === row.localId && (
+                        <div className="relative mt-1">
+                          <button
+                            type="button"
+                            className="w-full text-left px-2 py-1 text-[10px] font-medium bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+                            onClick={async () => {
+                              if (prevSpecsRowId === row.localId) {
+                                setPrevSpecsRowId(null);
+                                return;
+                              }
+                              setPrevSpecsRowId(row.localId);
+                              if (!prevPRLines[row.i_id]) {
+                                setLoadingPrevLines(true);
+                                const lines = await fetchPreviousPRLinesByItem(row.i_id);
+                                setPrevPRLines((prev) => ({ ...prev, [row.i_id]: lines }));
+                                setLoadingPrevLines(false);
+                              }
+                            }}
+                          >
+                            <History className="w-3 h-3" />
+                            Previous Requests
+                            <span className="text-[9px] opacity-70 ml-auto">
+                              {prevSpecsRowId === row.localId ? "▲" : "▼"}
+                            </span>
+                          </button>
+                          {prevSpecsRowId === row.localId && (
+                            <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-300 rounded-lg shadow-xl w-full min-w-[320px] max-h-52 overflow-y-auto">
+                              {loadingPrevLines ? (
+                                <div className="px-3 py-3 text-[11px] text-gray-400 text-center">
+                                  Loading...
+                                </div>
+                              ) : (prevPRLines[row.i_id] || []).length === 0 ? (
+                                <div className="px-3 py-3 text-[11px] text-gray-400 text-center">
+                                  No previous requests for this item
+                                </div>
+                              ) : (
+                                (prevPRLines[row.i_id] || []).slice(0, 10).map((prev, pIdx) => {
+                                  const specs = parseSpecEntries(prev.specifications);
+                                  const specSummary = specs.length > 0
+                                    ? specs.map((s) => `${s.label}: ${s.value}`).join(", ")
+                                    : "No specs";
+                                  const rowColors = [
+                                    "bg-blue-50 hover:bg-blue-100 border-l-blue-500",
+                                    "bg-green-50 hover:bg-green-100 border-l-green-500",
+                                    "bg-purple-50 hover:bg-purple-100 border-l-purple-500",
+                                    "bg-amber-50 hover:bg-amber-100 border-l-amber-500",
+                                    "bg-rose-50 hover:bg-rose-100 border-l-rose-500",
+                                    "bg-teal-50 hover:bg-teal-100 border-l-teal-500",
+                                    "bg-indigo-50 hover:bg-indigo-100 border-l-indigo-500",
+                                    "bg-orange-50 hover:bg-orange-100 border-l-orange-500",
+                                    "bg-cyan-50 hover:bg-cyan-100 border-l-cyan-500",
+                                    "bg-pink-50 hover:bg-pink-100 border-l-pink-500",
+                                  ];
+                                  const colorCls = rowColors[pIdx % rowColors.length];
+                                  return (
+                                    <button
+                                      key={prev.prl_id}
+                                      type="button"
+                                      className={`w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 border-l-4 transition-colors ${colorCls}`}
+                                      onClick={() => {
+                                        const specEntries = parseSpecEntries(prev.specifications);
+                                        updateDraftRow(row.localId, {
+                                          specEntries,
+                                        });
+                                        setPrevSpecsRowId(null);
+                                        setShowPrevReqRowId(null);
+                                      }}
+                                    >
+                                      <div className="text-[10px] text-gray-600 truncate" title={specSummary}>
+                                        {specSummary}
+                                      </div>
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* ── Structured specs editor ───── */}
                       {row.specEntries.length > 0 && (
                         <div className="mt-2 border-t border-gray-200 pt-1">
@@ -979,12 +1096,26 @@ const PurchaseRequestEntry = () => {
                                   !specQ ||
                                   s.description.toLowerCase().includes(specQ),
                               )
-                              .slice(0, 10);
+                              .slice(0, 20);
                             // Previously used values for this spec label
                             const pastValues =
                               specValueHistory[entry.label] || [];
+                            // All catalog values for this spec across all items
+                            const catalogVals =
+                              catalogSpecValues[entry.label] || [];
+                            // Also include catalog default value for this item+spec if available
+                            const catalogDefault = catalogSpecs.find(
+                              (d) => d.s_description === entry.label || d.s_id === entry.s_id,
+                            )?.spec_value;
+                            const allValues = [
+                              ...new Set([
+                                ...(catalogDefault ? [catalogDefault] : []),
+                                ...catalogVals,
+                                ...pastValues,
+                              ]),
+                            ];
                             const valueQ = entry.value.toLowerCase();
-                            const valueSuggestions = pastValues.filter(
+                            const valueSuggestions = allValues.filter(
                               (v) =>
                                 !valueQ || v.toLowerCase().includes(valueQ),
                             );
@@ -1000,7 +1131,7 @@ const PurchaseRequestEntry = () => {
                                     value={entry.label}
                                     placeholder="Spec name"
                                     className="text-[11px] font-bold bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none w-full"
-                                    onFocus={() => setSpecSuggestionKey(skKey)}
+                                    onFocus={() => !isReadOnly && setSpecSuggestionKey(skKey)}
                                     onBlur={() =>
                                       setTimeout(
                                         () => setSpecSuggestionKey(null),
@@ -1022,45 +1153,47 @@ const PurchaseRequestEntry = () => {
                                       );
                                       setSpecSuggestionKey(skKey);
                                     }}
+                                    disabled={isReadOnly}
                                   />
                                   {specSuggestionKey === skKey &&
                                     specSuggestions.length > 0 && (
-                                      <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-40 overflow-y-auto w-max min-w-full">
-                                        {specSuggestions.map((s) => {
-                                          const defaultVal =
-                                            catalogSpecs.find(
-                                              (d) => d.s_id === s.id,
-                                            )?.spec_value ?? "";
-                                          return (
-                                            <button
-                                              key={s.id}
-                                              type="button"
-                                              className="w-full text-left px-2 py-1 text-[11px] hover:bg-blue-50 flex items-center gap-2"
-                                              onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                updateSpecEntryInRow(
-                                                  row.localId,
-                                                  entry.id,
-                                                  {
-                                                    s_id: s.id,
-                                                    label: s.description,
-                                                    value: defaultVal,
-                                                  },
-                                                );
-                                                setSpecSuggestionKey(null);
-                                              }}
-                                            >
-                                              <span className="font-semibold flex-1">
-                                                {s.description}
-                                              </span>
-                                              {defaultVal && (
-                                                <span className="text-[9px] text-gray-400 shrink-0">
-                                                  {defaultVal}
+                                      <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl w-56 min-w-full max-h-44 overflow-y-auto py-1">
+                                          {specSuggestions.map((s) => {
+                                            const defaultVal =
+                                              catalogSpecs.find(
+                                                (d) => d.s_id === s.id,
+                                              )?.spec_value ?? "";
+                                            return (
+                                              <button
+                                                key={s.id}
+                                                type="button"
+                                                className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                                                onMouseDown={(e) => {
+                                                  e.preventDefault();
+                                                  updateSpecEntryInRow(
+                                                    row.localId,
+                                                    entry.id,
+                                                    {
+                                                      s_id: s.id,
+                                                      label: s.description,
+                                                      value: defaultVal,
+                                                    },
+                                                  );
+                                                  setSpecSuggestionKey(null);
+                                                }}
+                                              >
+                                                <History className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                                <span className="font-medium flex-1 truncate">
+                                                  {s.description}
                                                 </span>
-                                              )}
-                                            </button>
-                                          );
-                                        })}
+                                                {defaultVal && (
+                                                  <span className="text-[9px] text-gray-400 shrink-0">
+                                                    {defaultVal}
+                                                  </span>
+                                                )}
+                                              </button>
+                                            );
+                                          })}
                                       </div>
                                     )}
                                 </div>
@@ -1074,7 +1207,7 @@ const PurchaseRequestEntry = () => {
                                     value={entry.value}
                                     placeholder="value"
                                     className="text-[11px] w-full bg-transparent border-0 border-b border-transparent focus:border-gray-400 py-0 focus:outline-none text-gray-700"
-                                    onFocus={() => setSpecValueKey(skKey)}
+                                    onFocus={() => !isReadOnly && setSpecValueKey(skKey)}
                                     onBlur={() =>
                                       setTimeout(
                                         () => setSpecValueKey(null),
@@ -1095,28 +1228,36 @@ const PurchaseRequestEntry = () => {
                                       );
                                       setSpecValueKey(skKey);
                                     }}
+                                    disabled={isReadOnly}
                                   />
                                   {specValueKey === skKey &&
-                                    valueSuggestions.length > 0 && (
-                                      <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-200 rounded shadow-lg max-h-36 overflow-y-auto min-w-[110px] w-max">
-                                        {valueSuggestions.map((v) => (
-                                          <button
-                                            key={v}
-                                            type="button"
-                                            className="w-full text-left px-2 py-1 text-[11px] hover:bg-blue-50"
-                                            onMouseDown={(e) => {
-                                              e.preventDefault();
-                                              updateSpecEntryInRow(
-                                                row.localId,
-                                                entry.id,
-                                                { value: v },
-                                              );
-                                              setSpecValueKey(null);
-                                            }}
-                                          >
-                                            {v}
-                                          </button>
-                                        ))}
+                                    allValues.length > 0 && (
+                                      <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl min-w-[140px] w-max max-h-36 overflow-y-auto py-1">
+                                          {valueSuggestions.length > 0 ? (
+                                            valueSuggestions.map((v) => (
+                                              <button
+                                                key={v}
+                                                type="button"
+                                                className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                                                onMouseDown={(e) => {
+                                                  e.preventDefault();
+                                                  updateSpecEntryInRow(
+                                                    row.localId,
+                                                    entry.id,
+                                                    { value: v },
+                                                  );
+                                                  setSpecValueKey(null);
+                                                }}
+                                              >
+                                                <History className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                                <span className="truncate">{v}</span>
+                                              </button>
+                                            ))
+                                          ) : (
+                                            <div className="px-2.5 py-1.5 text-[10px] text-gray-400 italic">
+                                              No match — type to add new value
+                                            </div>
+                                          )}
                                       </div>
                                     )}
                                 </div>
@@ -1130,6 +1271,7 @@ const PurchaseRequestEntry = () => {
                                   }
                                   className="text-gray-300 hover:text-red-500 text-xs leading-none opacity-0 group-hover:opacity-100 shrink-0 print:hidden"
                                   title="Remove spec row"
+                                  hidden={isReadOnly}
                                 >
                                   ×
                                 </button>
@@ -1142,6 +1284,7 @@ const PurchaseRequestEntry = () => {
                         type="button"
                         onClick={() => addSpecEntryToRow(row.localId)}
                         className="mt-1.5 flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 font-medium print:hidden"
+                        hidden={isReadOnly}
                       >
                         <Plus className="w-3 h-3" />
                         Add Spec
@@ -1160,6 +1303,7 @@ const PurchaseRequestEntry = () => {
                             unitPrice: e.target.value,
                           })
                         }
+                        disabled={isReadOnly}
                       />
                     </td>
                     <td className="px-2 py-1 text-right align-top text-xs font-medium">
@@ -1170,6 +1314,7 @@ const PurchaseRequestEntry = () => {
                           onClick={() => removeDraftRow(row)}
                           className="text-gray-300 hover:text-red-500 print:hidden leading-none"
                           title="Remove row"
+                          hidden={isReadOnly}
                         >
                           ×
                         </button>
@@ -1180,6 +1325,7 @@ const PurchaseRequestEntry = () => {
               })}
 
               {/* Add row button */}
+              {!isReadOnly && (
               <tr className="border-b border-gray-300 print:hidden">
                 <td colSpan={6} className="px-3 py-1.5">
                   <button
@@ -1192,6 +1338,7 @@ const PurchaseRequestEntry = () => {
                   </button>
                 </td>
               </tr>
+              )}
 
               {/* Nothing Follows */}
               {draftRows.some((r) => r.item_description) && (
@@ -1236,6 +1383,7 @@ const PurchaseRequestEntry = () => {
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
                 placeholder="Purpose of the purchase request"
+                disabled={isReadOnly}
               />
             </div>
           </div>
@@ -1252,6 +1400,7 @@ const PurchaseRequestEntry = () => {
                 value={requestedBy}
                 onChange={(e) => setRequestedBy(e.target.value)}
                 placeholder="Name of requesting officer"
+                disabled={isReadOnly}
               />
             </div>
           </div>
@@ -1377,10 +1526,9 @@ const PurchaseRequestEntry = () => {
                 ) : (
                   <IconButton
                     onClick={() => openForm(row)}
-                    title="View (read-only)"
-                    disabled
+                    title="View"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Eye className="w-4 h-4" />
                   </IconButton>
                 )}
                 <IconButton

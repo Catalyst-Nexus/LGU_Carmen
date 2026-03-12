@@ -183,6 +183,35 @@ export const fetchSpecValueHistory = async (): Promise<
   return result;
 };
 
+// Returns all distinct spec values from the item_spec catalog table,
+// grouped by spec description (e.g. "Brand" → ["Xiaomi","Huawei"], "Color" → ["black","white"]).
+export const fetchAllCatalogSpecValues = async (): Promise<
+  Record<string, string[]>
+> => {
+  if (!isSupabaseConfigured() || !supabase) return {};
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("item_spec")
+    .select("spec_value, specs:s_id(description)");
+  if (error) {
+    console.error("Error fetching catalog spec values:", error);
+    return {};
+  }
+  const map: Record<string, Set<string>> = {};
+  for (const row of (data as any[]) || []) {
+    const spec = Array.isArray(row.specs) ? row.specs[0] : row.specs;
+    const label = (spec?.description ?? "").trim();
+    const value = (row.spec_value ?? "").trim();
+    if (label && value) {
+      if (!map[label]) map[label] = new Set();
+      map[label].add(value);
+    }
+  }
+  const result: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(map)) result[k] = [...v];
+  return result;
+};
+
 // ────────────────────────────────────────────────────────────
 // PURCHASE REQUESTS — header
 // ────────────────────────────────────────────────────────────
@@ -292,6 +321,56 @@ export const deletePurchaseRequest = async (
 // ────────────────────────────────────────────────────────────
 // PURCHASE REQUEST LINE ITEMS
 // ────────────────────────────────────────────────────────────
+
+// Fetches previous PR lines for a given item, including PR no. for identification.
+export interface PreviousPRLine {
+  prl_id: string;
+  pr_id: string;
+  pr_no: string;
+  pr_date: string;
+  qty: number;
+  unit_price_estimated: number;
+  specifications: string | null;
+  unit_code: string;
+}
+
+export const fetchPreviousPRLinesByItem = async (
+  i_id: string,
+): Promise<PreviousPRLine[]> => {
+  if (!isSupabaseConfigured() || !supabase || !i_id) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("purchase_request_list")
+    .select(
+      `
+      prl_id, pr_id, qty, unit_price_estimated, specifications,
+      unit:u_id ( u_code ),
+      purchase_request:pr_id ( pr_no, pr_date )
+    `,
+    )
+    .eq("i_id", i_id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Error fetching previous PR lines by item:", error);
+    return [];
+  }
+  return ((data as any[]) || []).map((row) => {
+    const unit = Array.isArray(row.unit) ? row.unit[0] : row.unit;
+    const pr = Array.isArray(row.purchase_request)
+      ? row.purchase_request[0]
+      : row.purchase_request;
+    return {
+      prl_id: row.prl_id,
+      pr_id: row.pr_id,
+      pr_no: pr?.pr_no ?? "",
+      pr_date: pr?.pr_date ?? "",
+      qty: row.qty,
+      unit_price_estimated: row.unit_price_estimated,
+      specifications: row.specifications,
+      unit_code: unit?.u_code ?? "",
+    };
+  });
+};
 
 export const fetchPRLines = async (
   prId: string,
