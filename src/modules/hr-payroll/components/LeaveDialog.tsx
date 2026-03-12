@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import { BaseDialog, FormInput } from '@/components/ui/dialog';
-import type { LeaveApplication } from '@/types/hr.types';
-import type { LeaveSubtype } from '@/services/hrService';
-import { fetchLeaveSubtypes, fetchPersonnelForLeave } from '@/services/hrService';
+import { useState, useEffect, useRef } from "react";
+import { BaseDialog, FormInput } from "@/components/ui/dialog";
+import type { LeaveApplication } from "@/types/hr.types";
+import type { LeaveSubtype, LeaveCredit } from "@/services/hrService";
+import {
+  fetchLeaveSubtypes,
+  fetchPersonnelForLeave,
+  fetchLeaveCredits,
+} from "@/services/hrService";
 
 interface LeaveDialogProps {
   open: boolean;
@@ -15,16 +19,44 @@ interface LeaveDialogProps {
 export interface LeaveFormData {
   per_id: string;
   los_id: string;
-  date_from: string;
-  date_to: string;
-  days: number;
+  applied_date: string;
+  credits: number;
+  pay_amount: number;
   remarks: string;
-  status: 'pending' | 'approved' | 'denied' | 'cancelled';
+  status: "pending" | "approved" | "denied" | "cancelled";
+  /** Specific calendar dates of leave for leave_out_dates */
+  leave_dates: string[];
+  /** personnel_leave_credits.id for the matched credit row */
+  plc_id: string;
 }
 
 interface PersonnelOption {
   id: string;
   name: string;
+  monthly_salary: number;
+}
+
+// Leave types that are WITHOUT PAY — pay_amount should be 0
+const WITHOUT_PAY_CODES = new Set(["LWOP", "STL", "SABL"]);
+
+// Standard working days divisor for Philippine government daily rate computation
+const WORKING_DAYS_PER_MONTH = 22;
+
+// Returns an array of ISO date strings between start and end (inclusive),
+// skipping weekends (Sat=6, Sun=0).
+function getWorkdaysBetween(start: string, end: string): string[] {
+  if (!start || !end || start > end) return [];
+  const dates: string[] = [];
+  const cur = new Date(start + "T00:00:00");
+  const last = new Date(end + "T00:00:00");
+  while (cur <= last) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) {
+      dates.push(cur.toISOString().split("T")[0]);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
 }
 
 const LeaveDialog = ({
@@ -34,167 +66,181 @@ const LeaveDialog = ({
   leave,
   isLoading = false,
 }: LeaveDialogProps) => {
-  const [employeeId, setEmployeeId] = useState('');
-  const [leaveTypeId, setLeaveTypeId] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [days, setDays] = useState('');
-  const [reason, setReason] = useState('');
-  const [status, setStatus] = useState<LeaveFormData['status']>('pending');
+  const [employeeId, setEmployeeId] = useState("");
+  const [leaveTypeId, setLeaveTypeId] = useState("");
+  const [appliedDate, setAppliedDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [payAmountOverride, setPayAmountOverride] = useState<string>("");
+  const [payAmountManual, setPayAmountManual] = useState(false);
+  const [remarks, setRemarks] = useState("");
 
   const [employees, setEmployees] = useState<PersonnelOption[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveSubtype[]>([]);
+  const [leaveCredits, setLeaveCredits] = useState<LeaveCredit[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  
-  // Searchable employee dropdown states
-  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [loadingCredits, setLoadingCredits] = useState(false);
+
+  // Searchable employee dropdown
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
-  const [filteredEmployees, setFilteredEmployees] = useState<PersonnelOption[]>([]);
-  
-  // Ref for click-outside detection
+  const [filteredEmployees, setFilteredEmployees] = useState<PersonnelOption[]>(
+    [],
+  );
   const employeeDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Load dropdown data
+  // Derived: computed workdays + matched credit row
+  const leaveDates = getWorkdaysBetween(dateFrom, dateTo);
+  const credits = leaveDates.length;
+
+  const selectedSubtype = leaveTypes.find((lt) => lt.id === leaveTypeId);
+  const matchedCredit = leaveCredits.find(
+    (c) => c.lot_id === selectedSubtype?.lot_id,
+  );
+  const hasEnoughCredits =
+    !matchedCredit || matchedCredit.current_balance >= credits;
+
+  // Auto-compute pay amount
+  const selectedEmployee = employees.find((e) => e.id === employeeId);
+  const isWithoutPay = selectedSubtype
+    ? WITHOUT_PAY_CODES.has(selectedSubtype.code)
+    : false;
+  const dailyRate = selectedEmployee
+    ? selectedEmployee.monthly_salary / WORKING_DAYS_PER_MONTH
+    : 0;
+  const computedPayAmount = isWithoutPay ? 0 : dailyRate * credits;
+  const displayPayAmount = payAmountManual
+    ? payAmountOverride
+    : computedPayAmount.toFixed(2);
+
   useEffect(() => {
-    if (open) {
-      loadDropdownData();
-    }
+    if (open) loadDropdownData();
   }, [open]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (employeeDropdownRef.current && !employeeDropdownRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        employeeDropdownRef.current &&
+        !employeeDropdownRef.current.contains(e.target as Node)
+      ) {
         setShowEmployeeDropdown(false);
       }
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Populate form when editing
+  // Load credits when employee changes
+  useEffect(() => {
+    if (employeeId) {
+      setLoadingCredits(true);
+      fetchLeaveCredits(employeeId).then((data) => {
+        setLeaveCredits(data);
+        setLoadingCredits(false);
+      });
+    } else {
+      setLeaveCredits([]);
+    }
+  }, [employeeId]);
+
   useEffect(() => {
     if (leave) {
       setEmployeeId(leave.employee_id);
-      // Find and set employee name for search display
-      const employee = employees.find(emp => emp.id === leave.employee_id);
-      if (employee) {
-        setEmployeeSearch(employee.name);
-      }
-      // setLeaveTypeId - would need to map from leave_type code to los_id
-      setDateFrom(leave.date_from);
-      setDateTo(leave.date_to);
-      setDays(leave.days.toString());
-      setReason(leave.reason);
-      setStatus(leave.status);
+      const emp = employees.find((e) => e.id === leave.employee_id);
+      if (emp) setEmployeeSearch(emp.name);
+      setAppliedDate(leave.applied_date);
+      // When editing, show the stored pay amount as a manual override
+      setPayAmountOverride(leave.pay_amount.toString());
+      setPayAmountManual(true);
+      setRemarks(leave.remarks);
     } else {
       resetForm();
     }
   }, [leave, employees]);
 
-  // Auto-calculate days when dates change
   useEffect(() => {
-    if (dateFrom && dateTo) {
-      const from = new Date(dateFrom);
-      const to = new Date(dateTo);
-      const diffTime = Math.abs(to.getTime() - from.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
-      setDays(diffDays.toString());
-    }
-  }, [dateFrom, dateTo]);
-
-  // Filter employees based on search input
-  useEffect(() => {
-    if (employeeSearch.trim() === '') {
-      setFilteredEmployees(employees);
-    } else {
-      const filtered = employees.filter(emp =>
-        emp.name.toLowerCase().includes(employeeSearch.toLowerCase())
-      );
-      setFilteredEmployees(filtered);
-    }
+    setFilteredEmployees(
+      employeeSearch.trim() === ""
+        ? employees
+        : employees.filter((emp) =>
+            emp.name.toLowerCase().includes(employeeSearch.toLowerCase()),
+          ),
+    );
   }, [employeeSearch, employees]);
 
   const loadDropdownData = async () => {
     setLoadingData(true);
-    const [employeesData, leaveTypesData] = await Promise.all([
+    const [emps, types] = await Promise.all([
       fetchPersonnelForLeave(),
       fetchLeaveSubtypes(),
     ]);
-    setEmployees(employeesData);
-    setLeaveTypes(leaveTypesData);
+    setEmployees(emps);
+    setLeaveTypes(types);
     setLoadingData(false);
   };
 
   const resetForm = () => {
-    setEmployeeId('');
-    setEmployeeSearch('');
-    setLeaveTypeId('');
-    setDateFrom('');
-    setDateTo('');
-    setDays('');
-    setReason('');
-    setStatus('pending');
+    setEmployeeId("");
+    setEmployeeSearch("");
+    setLeaveTypeId("");
+    setAppliedDate(new Date().toISOString().split("T")[0]);
+    setDateFrom("");
+    setDateTo("");
+    setPayAmountOverride("");
+    setPayAmountManual(false);
+    setRemarks("");
+    setShowEmployeeDropdown(false);
+    setLeaveCredits([]);
+  };
+
+  const handleEmployeeSelect = (emp: PersonnelOption) => {
+    setEmployeeId(emp.id);
+    setEmployeeSearch(emp.name);
     setShowEmployeeDropdown(false);
   };
 
-  const handleEmployeeSelect = (employee: PersonnelOption) => {
-    setEmployeeId(employee.id);
-    setEmployeeSearch(employee.name);
-    setShowEmployeeDropdown(false);
-  };
+  const isFormValid = () =>
+    employeeId !== "" &&
+    leaveTypeId !== "" &&
+    appliedDate !== "" &&
+    dateFrom !== "" &&
+    dateTo !== "" &&
+    leaveDates.length > 0 &&
+    hasEnoughCredits &&
+    !!matchedCredit;
 
   const handleSubmit = () => {
-    // Validate form before submitting
-    if (!isFormValid()) {
-      alert('Please fill in all required fields correctly.');
-      return;
-    }
-
-    const leaveData: LeaveFormData = {
+    if (!isFormValid() || !matchedCredit) return;
+    onSubmit({
       per_id: employeeId,
       los_id: leaveTypeId,
-      date_from: dateFrom,
-      date_to: dateTo,
-      days: parseInt(days, 10),
-      remarks: reason.trim(),
-      status: status,
-    };
-
-    onSubmit(leaveData);
-  };
-
-  const isFormValid = () => {
-    return (
-      employeeId !== '' &&
-      leaveTypeId !== '' &&
-      dateFrom !== '' &&
-      dateTo !== '' &&
-      days !== '' &&
-      !isNaN(parseInt(days, 10)) &&
-      parseInt(days, 10) > 0 &&
-      reason.trim() !== ''
-    );
+      applied_date: appliedDate,
+      credits,
+      pay_amount: parseFloat(displayPayAmount) || 0,
+      remarks: remarks.trim(),
+      status: "pending",
+      leave_dates: leaveDates,
+      plc_id: matchedCredit.id,
+    });
   };
 
   return (
     <BaseDialog
       open={open}
       onClose={onClose}
-      title={leave ? 'Edit Leave Application' : 'File Leave Application'}
+      title={leave ? "Edit Leave Application" : "File Leave Application"}
       onSubmit={handleSubmit}
-      submitLabel={leave ? 'Save Changes' : 'File Leave'}
+      submitLabel={leave ? "Save Changes" : "File Leave"}
       isLoading={isLoading || loadingData}
     >
       <div className="space-y-4">
-        {/* Employee Selector - Searchable */}
+        {/* Employee — searchable typeahead */}
         <div className="space-y-1.5">
-          <label htmlFor="employee" className="block text-sm font-medium text-foreground">
-            Employee
-            <span className="text-error ml-1">*</span>
+          <label
+            htmlFor="employee"
+            className="block text-sm font-medium text-foreground"
+          >
+            Employee <span className="text-error">*</span>
           </label>
           <div className="relative" ref={employeeDropdownRef}>
             <input
@@ -206,16 +252,14 @@ const LeaveDialog = ({
               onChange={(e) => {
                 setEmployeeSearch(e.target.value);
                 setShowEmployeeDropdown(true);
-                if (e.target.value === '') {
-                  setEmployeeId('');
-                }
+                if (e.target.value === "") setEmployeeId("");
               }}
               onFocus={() => setShowEmployeeDropdown(true)}
               disabled={loadingData}
               autoComplete="off"
             />
             {showEmployeeDropdown && filteredEmployees.length > 0 && (
-              <div className="absolute z-50 w-full mt-1 max-h-60 overflow-y-auto bg-background border border-border rounded-lg shadow-lg">
+              <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-background border border-border rounded-lg shadow-lg">
                 {filteredEmployees.map((emp) => (
                   <div
                     key={emp.id}
@@ -227,26 +271,29 @@ const LeaveDialog = ({
                 ))}
               </div>
             )}
-            {showEmployeeDropdown && filteredEmployees.length === 0 && employeeSearch && (
-              <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-lg shadow-lg px-3 py-2 text-sm text-muted-foreground">
-                No employees found
-              </div>
-            )}
+            {showEmployeeDropdown &&
+              filteredEmployees.length === 0 &&
+              employeeSearch && (
+                <div className="absolute z-50 w-full mt-1 bg-background border border-border rounded-lg shadow-lg px-3 py-2 text-sm text-muted-foreground">
+                  No employees found
+                </div>
+              )}
           </div>
         </div>
 
-        {/* Leave Type Selector */}
+        {/* Leave Type + Credit Balance */}
         <div className="space-y-1.5">
-          <label htmlFor="leave-type" className="block text-sm font-medium text-foreground">
-            Leave Type
-            <span className="text-error ml-1">*</span>
+          <label
+            htmlFor="leave-type"
+            className="block text-sm font-medium text-foreground"
+          >
+            Leave Type <span className="text-error">*</span>
           </label>
           <select
             id="leave-type"
             className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
             value={leaveTypeId}
             onChange={(e) => setLeaveTypeId(e.target.value)}
-            required
             disabled={loadingData}
           >
             <option value="">-- Select leave type --</option>
@@ -256,95 +303,222 @@ const LeaveDialog = ({
               </option>
             ))}
           </select>
+
+          {/* Credit balance badge */}
+          {employeeId &&
+            leaveTypeId &&
+            !loadingCredits &&
+            (matchedCredit ? (
+              <div
+                className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border ${
+                  hasEnoughCredits
+                    ? "bg-success/10 text-success border-success/20"
+                    : "bg-danger/10 text-danger border-danger/20"
+                }`}
+              >
+                <span className="font-medium">Credit Balance:</span>
+                <span className="font-bold">
+                  {matchedCredit.current_balance.toFixed(3)} days
+                </span>
+                {!hasEnoughCredits && (
+                  <span className="ml-1">
+                    (Insufficient — need {credits} days)
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-warning/10 text-warning border border-warning/20">
+                No credit record found for this leave type. Please set up leave
+                credits first.
+              </div>
+            ))}
+          {employeeId && leaveTypeId && loadingCredits && (
+            <p className="text-xs text-muted">Loading credit balance...</p>
+          )}
         </div>
 
-        {/* Date From */}
+        {/* Date Filed */}
         <div className="space-y-1.5">
-          <label htmlFor="date-from" className="block text-sm font-medium text-foreground">
-            From
-            <span className="text-error ml-1">*</span>
+          <label
+            htmlFor="applied-date"
+            className="block text-sm font-medium text-foreground"
+          >
+            Date Filed <span className="text-error">*</span>
           </label>
           <input
-            id="date-from"
+            id="applied-date"
             type="date"
             className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            required
+            value={appliedDate}
+            onChange={(e) => setAppliedDate(e.target.value)}
           />
         </div>
 
-        {/* Date To */}
+        {/* Leave Period (date range) */}
         <div className="space-y-1.5">
-          <label htmlFor="date-to" className="block text-sm font-medium text-foreground">
-            To
-            <span className="text-error ml-1">*</span>
+          <label className="block text-sm font-medium text-foreground">
+            Leave Period <span className="text-error">*</span>
           </label>
-          <input
-            id="date-to"
-            type="date"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            min={dateFrom}
-            required
-          />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label
+                htmlFor="date-from"
+                className="block text-xs text-muted mb-1"
+              >
+                From
+              </label>
+              <input
+                id="date-from"
+                type="date"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  if (!dateTo || e.target.value > dateTo)
+                    setDateTo(e.target.value);
+                }}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="date-to"
+                className="block text-xs text-muted mb-1"
+              >
+                To
+              </label>
+              <input
+                id="date-to"
+                type="date"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                value={dateTo}
+                min={dateFrom}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Computed days summary */}
+          {dateFrom && dateTo && (
+            <div className="text-xs text-muted space-y-1 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-foreground">
+                  {credits} working day{credits !== 1 ? "s" : ""}
+                </span>
+                <span>(weekends excluded)</span>
+              </div>
+              {leaveDates.length > 0 && leaveDates.length <= 10 && (
+                <div className="flex flex-wrap gap-1">
+                  {leaveDates.map((d) => (
+                    <span
+                      key={d}
+                      className="px-1.5 py-0.5 bg-accent rounded text-xs"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {leaveDates.length > 10 && (
+                <div>
+                  {leaveDates.slice(0, 5).map((d) => (
+                    <span
+                      key={d}
+                      className="px-1.5 py-0.5 bg-accent rounded text-xs mr-1"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                  <span className="text-xs text-muted">
+                    ... +{leaveDates.length - 5} more dates
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {dateFrom && dateTo && leaveDates.length === 0 && (
+            <p className="text-xs text-warning">
+              Selected range falls entirely on weekends.
+            </p>
+          )}
         </div>
 
-        {/* Days (auto-calculated) */}
+        {/* Pay Amount — auto-computed, manually overridable */}
         <div className="space-y-1.5">
-          <label htmlFor="days" className="block text-sm font-medium text-foreground">
-            Days
-            <span className="text-error ml-1">*</span>
-          </label>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="pay-amount"
+              className="block text-sm font-medium text-foreground"
+            >
+              Pay Amount
+            </label>
+            {credits > 0 && dailyRate > 0 && (
+              <button
+                type="button"
+                className="text-xs text-primary underline"
+                onClick={() => {
+                  setPayAmountManual(false);
+                  setPayAmountOverride("");
+                }}
+              >
+                {payAmountManual ? "Reset to computed" : ""}
+              </button>
+            )}
+          </div>
           <input
-            id="days"
+            id="pay-amount"
             type="number"
-            min="1"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-            required
-            readOnly
+            min="0"
+            step="0.01"
+            className={`w-full px-3 py-2.5 border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success ${
+              payAmountManual ? "border-warning" : "border-border"
+            }`}
+            value={displayPayAmount}
+            onChange={(e) => {
+              setPayAmountManual(true);
+              setPayAmountOverride(e.target.value);
+            }}
+            placeholder="0.00"
           />
-          <p className="text-xs text-muted">Auto-calculated from date range</p>
+          {/* Computation breakdown */}
+          {credits > 0 && dailyRate > 0 && !isWithoutPay && (
+            <p className="text-xs text-muted">
+              Daily rate: ₱{dailyRate.toFixed(2)} × {credits} day
+              {credits !== 1 ? "s" : ""} = ₱{computedPayAmount.toFixed(2)}
+              {payAmountManual && (
+                <span className="ml-2 text-warning">(manually overridden)</span>
+              )}
+            </p>
+          )}
+          {isWithoutPay && (
+            <p className="text-xs text-muted">
+              Leave Without Pay — no pay amount.
+            </p>
+          )}
+          {credits > 0 && dailyRate === 0 && (
+            <p className="text-xs text-warning">
+              No salary on file for this employee. Enter pay amount manually.
+            </p>
+          )}
         </div>
 
-        {/* Reason */}
+        {/* Remarks */}
         <FormInput
-          id="reason"
-          label="Reason"
+          id="remarks"
+          label="Remarks"
           type="textarea"
           rows={3}
           placeholder="Enter reason for leave application..."
-          value={reason}
-          onChange={setReason}
-          required
+          value={remarks}
+          onChange={setRemarks}
         />
 
-        {/* Status Selector */}
-        <div className="space-y-1.5">
-          <label htmlFor="status" className="block text-sm font-medium text-foreground">
-            Status
-            <span className="text-error ml-1">*</span>
-          </label>
-          <select
-            id="status"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as LeaveFormData['status'])}
-            required
-          >
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="denied">Denied</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        {!isFormValid() && (
+        {!isFormValid() && employeeId && leaveTypeId && dateFrom && dateTo && (
           <p className="text-xs text-error">
-            * Please fill in all required fields
+            {!matchedCredit
+              ? "* No leave credit record found for this leave type."
+              : !hasEnoughCredits
+                ? `* Insufficient credits. Balance: ${matchedCredit?.current_balance.toFixed(3)} days, Requested: ${credits} days.`
+                : "* Please fill in all required fields."}
           </p>
         )}
       </div>
