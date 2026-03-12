@@ -37,8 +37,26 @@ INSERT INTO modules (module_name, route_path, file_path, category, icons, is_act
 VALUES
   ('Estimate Income',               '/accounting/estimate-income',              'modules/Accounting/pages/EstimateIncome',              'ACCOUNTING', 'BadgeDollarSign', true),
   ('General Accounting Plan',       '/accounting/general-accounting-plan',      'modules/Accounting/pages/GeneralAccountingPlan',       'ACCOUNTING', 'BookOpen',        true),
-  ('Classification Appropriation',  '/accounting/classification-appropriation', 'modules/Accounting/pages/ClassificationAppropriation', 'ACCOUNTING', 'FolderTree',      true),
-  ('Treasury',                      '/accounting/treasury',                     'modules/Accounting/pages/Treasury',                    'TREASURY',   'Coins',           true)
+  ('Classification Appropriation',  '/accounting/classification-appropriation', 'modules/Accounting/pages/ClassificationAppropriation', 'ACCOUNTING', 'FolderTree',      true)
+ON CONFLICT (route_path) DO UPDATE
+  SET module_name = EXCLUDED.module_name,
+      file_path   = EXCLUDED.file_path,
+      category    = EXCLUDED.category,
+      icons       = EXCLUDED.icons,
+      is_active   = EXCLUDED.is_active;
+
+-- ==========================
+-- TREASURY MODULE
+-- ==========================
+
+INSERT INTO modules (module_name, route_path, file_path, category, icons, is_active)
+VALUES
+  ('Treasury Dashboard',            '/accounting/treasury',                     'modules/Treasury/pages/Treasury',                      'TREASURY',   'Coins',           true),
+  ('Official Receipts',             '/accounting/treasury/official-receipts',   'modules/Treasury/pages/OfficialReceipts',              'TREASURY',   'FileText',        true),
+  ('Cashflow Monitoring',           '/accounting/treasury/cashflow',            'modules/Treasury/pages/CashflowMonitoring',            'TREASURY',   'BarChart3',       true),
+  ('Collection Monitoring',         '/accounting/treasury/collections',         'modules/Treasury/pages/CollectionMonitoring',          'TREASURY',   'TrendingUp',      true),
+  ('Disbursement Tracking',         '/accounting/treasury/disbursements',       'modules/Treasury/pages/DisbursementTracking',          'TREASURY',   'TrendingDown',    true),
+  ('Bank Reconciliation',           '/accounting/treasury/reconciliation',      'modules/Treasury/pages/BankReconciliation',            'TREASURY',   'Landmark',        true)
 ON CONFLICT (route_path) DO UPDATE
   SET module_name = EXCLUDED.module_name,
       file_path   = EXCLUDED.file_path,
