@@ -82,6 +82,7 @@ const AttendanceDTR = () => {
   const [timeSlots, setTimeSlots] = useState<TimeSlotSchedule[]>([]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("today");
+  const [activeView, setActiveView] = useState("records");
   const [isLoading, setIsLoading] = useState(false);
 
   const loadRecords = useCallback(async () => {
@@ -107,15 +108,26 @@ const AttendanceDTR = () => {
         icon={<Clock className="w-6 h-6" />}
       />
 
-      <Tabs
-        tabs={[
-          { id: "today", label: "Today" },
-          { id: "weekly", label: "This Week" },
-          { id: "monthly", label: "This Month" },
-        ]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+      {/* ── Filter row: period tabs (left) + view tabs (right) ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Tabs
+          tabs={[
+            { id: "today", label: "Today" },
+            { id: "weekly", label: "This Week" },
+            { id: "monthly", label: "This Month" },
+          ]}
+          activeTab={activeTab}
+          onTabChange={(tab) => { setActiveTab(tab); setSearch(""); }}
+        />
+        <Tabs
+          tabs={[
+            { id: "records",   label: "Attendance Records" },
+            { id: "timeslots", label: "Time Slot Schedule"  },
+          ]}
+          activeTab={activeView}
+          onTabChange={setActiveView}
+        />
+      </div>
 
       <ActionsBar>
         <PrimaryButton onClick={loadRecords} disabled={isLoading}>
@@ -128,123 +140,128 @@ const AttendanceDTR = () => {
         </PrimaryButton>
       </ActionsBar>
 
-      <DataTable<AttendanceRecord>
-        data={records.filter((r) =>
-          r.employee_name.toLowerCase().includes(search.toLowerCase()),
-        )}
-        columns={[
-          { key: "employee_name", header: "Employee" },
-          { key: "date", header: "Date" },
-          {
-            key: "in" as keyof AttendanceRecord,
-            header: "In",
-            render: (item) => <span>{item.in || "\u2014"}</span>,
-          },
-          {
-            key: "out" as keyof AttendanceRecord,
-            header: "Out",
-            render: (item) => <span>{item.out || "\u2014"}</span>,
-          },
-          {
-            key: "time_slot_desc",
-            header: "Time Slot",
-            render: (item) => (
-              <span className="capitalize">
-                {item.time_slot_desc?.replace(/_/g, " ") || "—"}
-              </span>
-            ),
-          },
-          {
-            key: "time_identifier",
-            header: "Type",
-            render: (item) => (
-              <span
-                className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
-                  item.time_identifier === 1
-                    ? "bg-blue-500/10 text-blue-600"
-                    : "bg-orange-500/10 text-orange-600"
-                }`}
-              >
-                {item.time_identifier === 1 ? "IN" : "OUT"}
-              </span>
-            ),
-          },
-          {
-            key: "total_hours",
-            header: "Total Hours",
-            render: (item) => {
-              if (!item.total_hours) return <span>—</span>;
-              const hrs = Math.floor(item.total_hours);
-              const mins = Math.round((item.total_hours - hrs) * 60);
-              return (
-                <span>
-                  {hrs}h{mins > 0 ? ` ${mins}m` : ""}
-                </span>
-              );
+      {/* ── Attendance Records ── */}
+      {activeView === "records" && (
+        <DataTable<AttendanceRecord>
+          data={records.filter((r) =>
+            r.employee_name.toLowerCase().includes(search.toLowerCase()),
+          )}
+          columns={[
+            { key: "employee_name", header: "Employee" },
+            { key: "date", header: "Date" },
+            {
+              key: "in" as keyof AttendanceRecord,
+              header: "In",
+              render: (item) => <span>{item.in || "\u2014"}</span>,
             },
-          },
-          {
-            key: "pay_amount",
-            header: "Pay",
-            render: (item) => <span>₱{item.pay_amount.toFixed(2)}</span>,
-          },
-        ]}
-        title="Attendance Records"
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by employee name..."
-        emptyMessage="No attendance records found."
-      />
+            {
+              key: "out" as keyof AttendanceRecord,
+              header: "Out",
+              render: (item) => <span>{item.out || "\u2014"}</span>,
+            },
+            {
+              key: "time_slot_desc",
+              header: "Time Slot",
+              render: (item) => (
+                <span className="capitalize">
+                  {item.time_slot_desc?.replace(/_/g, " ") || "—"}
+                </span>
+              ),
+            },
+            {
+              key: "time_identifier",
+              header: "Type",
+              render: (item) => (
+                <span
+                  className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
+                    item.time_identifier === 1
+                      ? "bg-blue-500/10 text-blue-600"
+                      : "bg-orange-500/10 text-orange-600"
+                  }`}
+                >
+                  {item.time_identifier === 1 ? "IN" : "OUT"}
+                </span>
+              ),
+            },
+            {
+              key: "total_hours",
+              header: "Total Hours",
+              render: (item) => {
+                if (!item.total_hours) return <span>—</span>;
+                const hrs = Math.floor(item.total_hours);
+                const mins = Math.round((item.total_hours - hrs) * 60);
+                return (
+                  <span>
+                    {hrs}h{mins > 0 ? ` ${mins}m` : ""}
+                  </span>
+                );
+              },
+            },
+            {
+              key: "pay_amount",
+              header: "Pay",
+              render: (item) => <span>₱{item.pay_amount.toFixed(2)}</span>,
+            },
+          ]}
+          title="Attendance Records"
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by employee name..."
+          emptyMessage="No attendance records found."
+        />
+      )}
 
-      {/* Time Slot Schedule Reference Table */}
-      <div className="bg-surface rounded-lg border border-border p-4">
-        <h3 className="text-lg font-semibold mb-3">Time Slot Schedule</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="pb-2 pr-4 font-medium">Description</th>
-                <th className="pb-2 pr-4 font-medium">Time Range</th>
-                <th className="pb-2 pr-4 font-medium">Actual Date</th>
-                <th className="pb-2 font-medium">Midnight Crossing</th>
-              </tr>
-            </thead>
-            <tbody>
-              {timeSlots.map((slot) => (
-                <tr key={slot.id} className="border-b border-border/50">
-                  <td className="py-2 pr-4 capitalize">
-                    {slot.description.replace(/_/g, " ")}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {slot.time_start} – {slot.time_end}
-                  </td>
-                  <td className="py-2 pr-4">
-                    {slot.actual_date === 1 ? "Same day" : "Next day"}
-                  </td>
-                  <td className="py-2">
-                    <span
-                      className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
-                        slot.is_midnight_crossing
-                          ? "bg-amber-500/10 text-amber-600"
-                          : "bg-green-500/10 text-green-600"
-                      }`}
-                    >
-                      {slot.is_midnight_crossing ? "Yes" : "No"}
-                    </span>
-                  </td>
+      {/* ── Time Slot Schedule ── */}
+      {activeView === "timeslots" && (
+        <div className="bg-surface rounded-lg border border-border p-4">
+          <h3 className="text-lg font-semibold mb-3">Time Slot Schedule</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="pb-2 pr-4 font-medium">Description</th>
+                  <th className="pb-2 pr-4 font-medium">Time Range</th>
+                  <th className="pb-2 pr-4 font-medium">Actual Date</th>
+                  <th className="pb-2 font-medium">Midnight Crossing</th>
                 </tr>
-              ))}
-              {timeSlots.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-4 text-center text-muted">
-                    No time slot schedules found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {timeSlots.map((slot) => (
+                  <tr key={slot.id} className="border-b border-border/50">
+                    <td className="py-2 pr-4 capitalize">
+                      {slot.description.replace(/_/g, " ")}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {slot.time_start} – {slot.time_end}
+                    </td>
+                    <td className="py-2 pr-4">
+                      {slot.actual_date === 1 ? "Same day" : "Next day"}
+                    </td>
+                    <td className="py-2">
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
+                          slot.is_midnight_crossing
+                            ? "bg-amber-500/10 text-amber-600"
+                            : "bg-green-500/10 text-green-600"
+                        }`}
+                      >
+                        {slot.is_midnight_crossing ? "Yes" : "No"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {timeSlots.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-4 text-center text-muted">
+                      No time slot schedules found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
