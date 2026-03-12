@@ -4,6 +4,7 @@ import { useAuthStore, useSettingsStore } from "@/store";
 import { useResolvedAvatarUrl } from "@/hooks/useResolvedAvatarUrl";
 import { cn } from "@/lib/utils";
 import { Lightbulb, AlertCircle } from "lucide-react";
+import LightRays from "@/components/LightRays/LightRays";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -41,16 +42,26 @@ const Login = () => {
 
   return (
     <div className="relative flex min-h-screen overflow-hidden">
-      {/* Left Section - Logo */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary relative items-center justify-center">
-        <div
-          className="absolute inset-0 opacity-5"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, white 1px, transparent 1px)",
-            backgroundSize: "50px 50px",
-          }}
+      {/* Full-screen LightRays background */}
+      <div className="absolute inset-0 z-0 bg-primary">
+        <LightRays
+          raysOrigin="top-center"
+          raysColor="#ffffff"
+          raysSpeed={1}
+          lightSpread={0.5}
+          rayLength={3}
+          followMouse={true}
+          mouseInfluence={0.1}
+          noiseAmount={0}
+          distortion={0}
+          pulsating={false}
+          fadeDistance={1}
+          saturation={1}
         />
+      </div>
+
+      {/* Left Section - Logo */}
+      <div className="hidden lg:flex lg:w-1/2 relative items-center justify-center z-10">
         <div className="relative z-10 flex flex-col items-center gap-8 px-12">
           {logoSrc && (
             <img
@@ -71,7 +82,7 @@ const Login = () => {
       </div>
 
       {/* Right Section - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center bg-surface p-8">
+      <div className="w-full lg:w-1/2 flex items-center justify-center bg-surface p-8 relative z-10">
         <div className="w-full max-w-md">
           {/* Mobile logo - shown on small screens */}
           <div className="flex flex-col items-center mb-8 lg:hidden">
