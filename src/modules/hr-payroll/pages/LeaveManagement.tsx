@@ -78,7 +78,12 @@ const LeaveManagement = () => {
     if (result.success) {
       loadLeaves();
     } else {
-      const action = status === "approved" ? "approve" : status === "denied" ? "deny" : "cancel";
+      const action =
+        status === "approved"
+          ? "approve"
+          : status === "denied"
+            ? "deny"
+            : "cancel";
       alert(result.error || `Failed to ${action} leave`);
     }
   };
@@ -153,9 +158,7 @@ const LeaveManagement = () => {
             key: "leave_type",
             header: "Type",
             render: (item) => (
-              <span title={item.leave_type_desc}>
-                {item.leave_type}
-              </span>
+              <span title={item.leave_type_desc}>{item.leave_type}</span>
             ),
           },
           { key: "applied_date", header: "Date Filed" },
@@ -186,16 +189,12 @@ const LeaveManagement = () => {
           {
             key: "approved_date",
             header: "Date of Action",
-            render: (item) => (
-              <span>{item.approved_date ?? "—"}</span>
-            ),
+            render: (item) => <span>{item.approved_date ?? "—"}</span>,
           },
           {
             key: "approved_by_name",
             header: "Approved By",
-            render: (item) => (
-              <span>{item.approved_by_name ?? "—"}</span>
-            ),
+            render: (item) => <span>{item.approved_by_name ?? "—"}</span>,
           },
           {
             key: "pay_amount",
