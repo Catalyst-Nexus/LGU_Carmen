@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router';
-import { Coins, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, BarChart3, Landmark, ArrowLeft } from 'lucide-react';
+import { Coins, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, BarChart3, Landmark, ArrowLeft, FileText } from 'lucide-react';
 import CashflowMonitoring from './CashflowMonitoring';
 import CollectionMonitoring from './CollectionMonitoring';
 import DisbursementTracking from './DisbursementTracking';
 import BankReconciliation from './BankReconciliation';
+import OfficialReceipts from './OfficialReceipts';
 
 const TreasuryHome = () => {
   const navigate = useNavigate();
@@ -95,6 +96,17 @@ const TreasuryHome = () => {
 
       {/* Module Navigation */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          onClick={() => navigate('official-receipts')}
+          className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
+        >
+          <div className="p-3 bg-gradient-to-br from-emerald-500 to-green-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
+            <FileText className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Official Receipts</h3>
+          <p className="text-xs text-muted">Generate and manage official receipts</p>
+        </button>
+
         <button
           onClick={() => navigate('cashflow')}
           className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
@@ -247,6 +259,21 @@ const Treasury = () => {
               Back to Treasury
             </button>
             <BankReconciliation />
+          </div>
+        }
+      />
+      <Route
+        path="official-receipts"
+        element={
+          <div>
+            <button
+              onClick={() => navigate('..')}
+              className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Treasury
+            </button>
+            <OfficialReceipts />
           </div>
         }
       />
