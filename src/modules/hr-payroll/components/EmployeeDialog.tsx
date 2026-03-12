@@ -416,11 +416,13 @@ const EmployeeDialog = ({
             disabled={loadingData}
           >
             <option value="">-- Select a position --</option>
-            {positions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.item_no} — {p.description}
-              </option>
-            ))}
+            {positions
+              .filter((p) => !p.is_filled || p.id === positionId)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.item_no} — {p.description}
+                </option>
+              ))}
           </FormSelect>
 
           <FormSelect

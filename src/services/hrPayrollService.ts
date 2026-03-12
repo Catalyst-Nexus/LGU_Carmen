@@ -165,6 +165,157 @@ export const fetchPaySlips = async (): Promise<PayrollEntry[]> => {
 };
 
 // =============================================================================
+// Daily Pay Records (Attendance Detail)
+// =============================================================================
+
+export interface DailyPayRecord {
+  id: string;
+  date: string;
+  employee_id: string;
+  employee_name: string;
+  time_slot_desc: string | null;
+  time_in: string | null;
+  time_out: string | null;
+  has_out: boolean;
+  total_hours: number;
+  pay_amount: number;
+}
+
+type TimeRecordJoinRow = {
+  id: string;
+  per_id: string;
+  date: string;
+  in: string | null;
+  out: string | null;
+  total_hours: number | null;
+  pay_amount: number | null;
+  personnel:
+    | { first_name: string; last_name: string }
+    | { first_name: string; last_name: string }[]
+    | null;
+  time_slot_schedule:
+    | { description: string }
+    | { description: string }[]
+    | null;
+};
+
+/**
+ * Fetch per-employee per-day time records for a given date range.
+ * Maps each row to a DailyPayRecord; has_out is true when the out time is set.
+ */
+export const fetchDailyPayRecords = async (
+  periodStart: string,
+  periodEnd: string,
+): Promise<DailyPayRecord[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("time_record")
+    .select(
+      `
+      id, per_id, date, in, out,
+      total_hours, pay_amount,
+      personnel:per_id ( first_name, last_name ),
+      time_slot_schedule:time_slot_id ( description )
+    `,
+    )
+    .gte("date", periodStart)
+    .lte("date", periodEnd)
+    .order("date", { ascending: true })
+    .order("in", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching daily pay records:", error);
+    return [];
+  }
+
+  return ((data as unknown as TimeRecordJoinRow[]) || []).map((row) => {
+    const per = Array.isArray(row.personnel) ? row.personnel[0] : row.personnel;
+    const slot = Array.isArray(row.time_slot_schedule)
+      ? row.time_slot_schedule[0]
+      : row.time_slot_schedule;
+    return {
+      id: row.id,
+      date: row.date,
+      employee_id: row.per_id,
+      employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
+      time_slot_desc: slot?.description ?? null,
+      time_in: row.in,
+      time_out: row.out,
+      has_out: row.out !== null,
+      total_hours: Number(row.total_hours) || 0,
+      pay_amount: Number(row.pay_amount) || 0,
+    };
+  });
+};
+
+// =============================================================================
+// Employee Pay Summaries
+// =============================================================================
+
+export interface EmployeePaySummary {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  days_worked: number;
+  total_hours: number;
+  gross_pay: number;
+}
+
+/**
+ * Aggregate time records for a period into per-employee summaries.
+ * days_worked = distinct dates with a complete (out != null) session.
+ * total_hours / gross_pay = sum across all complete sessions.
+ */
+export const fetchEmployeePaySummaries = async (
+  periodStart: string,
+  periodEnd: string,
+): Promise<EmployeePaySummary[]> => {
+  const records = await fetchDailyPayRecords(periodStart, periodEnd);
+
+  const map = new Map<
+    string,
+    {
+      employee_id: string;
+      employee_name: string;
+      completeDates: Set<string>;
+      total_hours: number;
+      gross_pay: number;
+    }
+  >();
+
+  for (const r of records) {
+    if (!map.has(r.employee_id)) {
+      map.set(r.employee_id, {
+        employee_id: r.employee_id,
+        employee_name: r.employee_name,
+        completeDates: new Set(),
+        total_hours: 0,
+        gross_pay: 0,
+      });
+    }
+    const entry = map.get(r.employee_id)!;
+    if (r.has_out) {
+      entry.completeDates.add(r.date);
+      entry.total_hours += r.total_hours;
+      entry.gross_pay += r.pay_amount;
+    }
+  }
+
+  return Array.from(map.values())
+    .map((e) => ({
+      id: e.employee_id,
+      employee_id: e.employee_id,
+      employee_name: e.employee_name,
+      days_worked: e.completeDates.size,
+      total_hours: e.total_hours,
+      gross_pay: e.gross_pay,
+    }))
+    .sort((a, b) => a.employee_name.localeCompare(b.employee_name));
+};
+
+// =============================================================================
 // Remittance
 // =============================================================================
 

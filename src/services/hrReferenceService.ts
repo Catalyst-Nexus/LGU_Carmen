@@ -18,6 +18,7 @@ export interface Position {
   id: string;
   description: string;
   item_no: string;
+  is_filled: boolean;
 }
 
 export interface SalaryRate {
@@ -103,7 +104,7 @@ export const fetchPositions = async (): Promise<Position[]> => {
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("position")
-    .select("id, description, item_no")
+    .select("id, description, item_no, is_filled")
     .order("description");
 
   if (error) {
