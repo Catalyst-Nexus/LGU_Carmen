@@ -1,9 +1,11 @@
 -- =============================================================================
--- Migration 007 — Time Slot Schedule + Time Record restructure
+-- Migration 007 — Time Slot Schedule + Time Record hours calculation trigger
 --
 -- 1. hr.time_slot_schedule  — defines shift types (graveyard, AM, PM, etc.)
--- 2. ALTER hr.time_record   — add time_slot_id, time_identifier, total_hours
--- 3. hr.calc_time_record_hours() — pairs IN/OUT records to compute total_hours
+-- 2. hr.calc_time_record_hours() — pairs IN/OUT records to compute total_hours
+--
+-- NOTE: time_record columns (time_slot_id, time_identifier, total_hours)
+--       and their indexes are defined in migration 001.
 -- =============================================================================
 
 -- =============================================================================
@@ -46,31 +48,7 @@ CREATE POLICY "hr_time_slot_schedule_w"
   ON hr.time_slot_schedule FOR ALL TO service_role USING (true);
 
 -- =============================================================================
--- SECTION 2 — ALTER TIME RECORD
--- Add time_slot_id, time_identifier (1=IN, 2=OUT), total_hours
--- Drop old unique constraint, add new one that allows multiple entries per day
--- =============================================================================
-
--- Add new columns
-ALTER TABLE hr.time_record
-  ADD COLUMN IF NOT EXISTS time_slot_id     UUID      REFERENCES hr.time_slot_schedule(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS time_identifier  SMALLINT  DEFAULT 1 CHECK (time_identifier IN (1, 2)),
-  ADD COLUMN IF NOT EXISTS total_hours      NUMERIC(6,2) DEFAULT 0;
-
--- Drop old unique constraint to allow multiple records per person per date
--- (e.g. regular_1 + regular_2 on same day, or IN + OUT as separate rows)
-ALTER TABLE hr.time_record DROP CONSTRAINT IF EXISTS time_record_per_id_date_key;
-
--- New unique: one IN or OUT per person × date × time_slot
-CREATE UNIQUE INDEX IF NOT EXISTS uq_time_record_per_date_slot_ident
-  ON hr.time_record (per_id, date, time_slot_id, time_identifier);
-
--- Index for the pairing lookup
-CREATE INDEX IF NOT EXISTS idx_time_record_slot_lookup
-  ON hr.time_record (per_id, time_slot_id, time_identifier, date);
-
--- =============================================================================
--- SECTION 3 — HOURS CALCULATION FUNCTION
+-- SECTION 2 — HOURS CALCULATION FUNCTION
 --
 -- Runs when a time_identifier=2 (OUT) record is inserted or updated.
 -- Finds the matching time_identifier=1 (IN) record:
@@ -111,8 +89,8 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Determine the out time from whichever column is set (in1/out1/in2/out2 or legacy)
-  v_out_time := COALESCE(NEW.out1, NEW.out2);
+  -- Determine the out time from the "out" column
+  v_out_time := NEW."out";
 
   IF v_out_time IS NULL THEN
     RETURN NEW;
@@ -157,7 +135,7 @@ BEGIN
   END IF;
 
   -- Get the in time
-  v_in_time := COALESCE(v_in_record.in1, v_in_record.in2);
+  v_in_time := v_in_record."in";
 
   IF v_in_time IS NULL THEN
     NEW.total_hours := 0;
@@ -197,6 +175,6 @@ $$;
 DROP TRIGGER IF EXISTS trg_calc_time_record_hours ON hr.time_record;
 
 CREATE TRIGGER trg_calc_time_record_hours
-  BEFORE INSERT OR UPDATE OF out1, out2, time_slot_id, time_identifier
+  BEFORE INSERT OR UPDATE OF "out", time_slot_id, time_identifier
   ON hr.time_record
   FOR EACH ROW EXECUTE FUNCTION hr.calc_time_record_hours();

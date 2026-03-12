@@ -8,7 +8,6 @@
 --   FIX #3  hr.ot_type — dynamic OT multipliers (Regular 1.25, Night 1.10, etc.)
 --   FIX #4  RAISE WARNING in pay trigger when personnel has no position
 --   FIX #5  pay_slip uses period_start DATE + period_end DATE (not TEXT month)
---   FIX #6  time_record stores rate_snapshot + is_perday_snapshot (audit trail)
 --   IMP #7  Civil service fields on personnel (GSIS, PhilHealth, Pag-IBIG, TIN)
 --   IMP #8  hr.deduction_type — dynamic deduction registry
 --   IMP #9  Approval workflow on pay_slip and payroll (prepared/certified/approved)
@@ -16,6 +15,7 @@
 --   IMP #11 hr.service_record — CSC employment history per personnel
 --   IMP #12 Leave credit restore trigger on delete
 --   IMP #13 Covering indexes for payroll batch generation
+--   IMP #14 time_record uses "in"/"out" + time_slot_id + time_identifier model
 -- =============================================================================
 
 -- =============================================================================
@@ -373,43 +373,32 @@ CREATE TRIGGER trg_restore_leave_credit
   FOR EACH ROW EXECUTE FUNCTION hr.restore_leave_credit();
 
 -- =============================================================================
--- SECTION 5 — TIME RECORD  (FIX #3 #4 #6)
--- pay_amount and rate_snapshot are AUTO-SET by trigger.
+-- SECTION 5 — TIME RECORD
+-- Each row = one clock event (IN or OUT) for a specific time slot.
+-- time_identifier: 1 = IN, 2 = OUT
+-- total_hours: auto-computed by trg_calc_time_record_hours when OUT is inserted
+-- pay_amount:  auto-computed by trg_calc_time_record_pay
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS hr.time_record (
   id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
   per_id              UUID          NOT NULL REFERENCES hr.personnel(id) ON DELETE CASCADE,
   date                DATE          NOT NULL,
-  -- AM/PM slots
-  in1                 TIME,
-  out1                TIME,
-  in2                 TIME,
-  out2                TIME,
-  -- Overtime slot + type (FIX #3 — dynamic multiplier)
-  ot_in               TIME,
-  ot_out              TIME,
-  ot_type_id          UUID          REFERENCES hr.ot_type(id) ON DELETE SET NULL,
-  -- Rate snapshot at computation time (FIX #6 — protects history)
-  rate_snapshot       NUMERIC(12,2) NOT NULL DEFAULT 0,
-  is_perday_snapshot  BOOLEAN       NOT NULL DEFAULT false,
-  -- Auto-computed by trigger — do NOT set manually
+  "in"                TIME,
+  "out"               TIME,
   pay_amount          NUMERIC(12,2) NOT NULL DEFAULT 0,
   created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
-  UNIQUE (per_id, date)
+  time_slot_id        UUID          REFERENCES hr.time_slot_schedule(id) ON DELETE SET NULL,
+  time_identifier     SMALLINT      DEFAULT 1 CHECK (time_identifier IN (1, 2)),
+  total_hours         NUMERIC(6,2)  DEFAULT 0
 );
 
 -- --------------------------
--- TRIGGER: auto-calculate time_record.pay_amount  (FIX #3 #4 #6)
+-- TRIGGER: auto-calculate time_record.pay_amount
 --
 -- Logic:
---   1. Resolve personnel → position → salary_rate → rate  (snapshot saved)
---   2. If is_perday  → pay_amount = rate.amount  (flat daily)
---   3. If hourly     → pay_amount = reg_hours × rate + ot_hours × rate × ot_multiplier
---       reg_hours = (out1-in1) + (out2-in2)   [decimal hours]
---       ot_hours  = ot_out - ot_in
---       ot_multiplier from hr.ot_type.multiplier (dynamic, defaults to 1.25)
---   4. RAISE WARNING if personnel has no position (FIX #4)
+--   1. Resolve personnel → position → salary_rate → rate
+--   2. Compute pay_amount based on hours and rate
 -- --------------------------
 CREATE OR REPLACE FUNCTION hr.calc_time_record_pay()
 RETURNS TRIGGER
@@ -419,9 +408,6 @@ AS $$
 DECLARE
   v_rate_amount   NUMERIC(12,2);
   v_is_perday     BOOLEAN;
-  v_ot_multiplier NUMERIC(5,3) := 1.25;
-  v_reg_hours     NUMERIC := 0;
-  v_ot_hours      NUMERIC := 0;
 BEGIN
   -- Resolve rate chain: personnel → position → salary_rate → rate
   SELECT r.amount, sr.is_perday
@@ -432,50 +418,26 @@ BEGIN
     JOIN hr.rate        r   ON r.id   = sr.rate_id
    WHERE p.id = NEW.per_id;
 
-  -- FIX #4: warn instead of silently zeroing out
   IF NOT FOUND THEN
     RAISE WARNING
-      'hr.time_record: personnel id % has no position assigned — pay_amount set to 0. Assign a position to compute pay.',
+      'hr.time_record: personnel id % has no position assigned — pay_amount set to 0.',
       NEW.per_id;
-    NEW.pay_amount         := 0;
-    NEW.rate_snapshot      := 0;
-    NEW.is_perday_snapshot := false;
+    NEW.pay_amount := 0;
     RETURN NEW;
-  END IF;
-
-  -- FIX #6: snapshot rate at computation time
-  NEW.rate_snapshot      := v_rate_amount;
-  NEW.is_perday_snapshot := v_is_perday;
-
-  -- FIX #3: dynamic OT multiplier from ot_type row
-  IF NEW.ot_type_id IS NOT NULL THEN
-    SELECT multiplier INTO v_ot_multiplier
-      FROM hr.ot_type
-     WHERE id = NEW.ot_type_id AND is_active = true;
   END IF;
 
   IF v_is_perday THEN
     NEW.pay_amount := v_rate_amount;
-
   ELSE
-    -- Regular hours — AM slot
-    IF NEW.in1 IS NOT NULL AND NEW.out1 IS NOT NULL AND NEW.out1 > NEW.in1 THEN
-      v_reg_hours := v_reg_hours
-        + EXTRACT(EPOCH FROM (NEW.out1 - NEW.in1)) / 3600.0;
+    -- Hourly: compute from in/out
+    IF NEW."in" IS NOT NULL AND NEW."out" IS NOT NULL AND NEW."out" > NEW."in" THEN
+      NEW.pay_amount := ROUND(
+        EXTRACT(EPOCH FROM (NEW."out" - NEW."in")) / 3600.0 * (v_rate_amount / 176.0),
+        2
+      );
+    ELSE
+      NEW.pay_amount := 0;
     END IF;
-    -- Regular hours — PM slot
-    IF NEW.in2 IS NOT NULL AND NEW.out2 IS NOT NULL AND NEW.out2 > NEW.in2 THEN
-      v_reg_hours := v_reg_hours
-        + EXTRACT(EPOCH FROM (NEW.out2 - NEW.in2)) / 3600.0;
-    END IF;
-    -- Overtime hours
-    IF NEW.ot_in IS NOT NULL AND NEW.ot_out IS NOT NULL AND NEW.ot_out > NEW.ot_in THEN
-      v_ot_hours := EXTRACT(EPOCH FROM (NEW.ot_out - NEW.ot_in)) / 3600.0;
-    END IF;
-
-    NEW.pay_amount := ROUND(
-      (v_reg_hours * v_rate_amount) + (v_ot_hours * v_rate_amount * v_ot_multiplier),
-    2);
   END IF;
 
   RETURN NEW;
@@ -483,7 +445,7 @@ END;
 $$;
 
 CREATE TRIGGER trg_calc_time_record_pay
-  BEFORE INSERT OR UPDATE OF in1, out1, in2, out2, ot_in, ot_out, ot_type_id
+  BEFORE INSERT OR UPDATE OF "in", "out"
   ON hr.time_record
   FOR EACH ROW EXECUTE FUNCTION hr.calc_time_record_pay();
 
@@ -680,10 +642,13 @@ CREATE INDEX idx_personnel_office       ON hr.personnel(o_id);
 CREATE INDEX idx_personnel_position     ON hr.personnel(pos_id);
 CREATE INDEX idx_personnel_active       ON hr.personnel(is_active);
 
--- Time records — covering index for payroll batch generation
--- Query: WHERE per_id = ? AND date BETWEEN ? AND ?  → includes pay_amount
+-- Time records
 CREATE INDEX idx_time_record_per_date   ON hr.time_record(per_id, date);
 CREATE INDEX idx_time_record_pay        ON hr.time_record(per_id, date, pay_amount);
+CREATE UNIQUE INDEX uq_time_record_per_date_slot_ident
+  ON hr.time_record (per_id, date, time_slot_id, time_identifier);
+CREATE INDEX idx_time_record_slot_lookup
+  ON hr.time_record (per_id, time_slot_id, time_identifier, date);
 
 -- Leave system
 CREATE INDEX idx_leave_out_per          ON hr.personnel_leave_out(per_id, status);

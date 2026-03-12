@@ -56,19 +56,18 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
     return [];
   }
 
-  return ((data as TimeRecordRow[]) || []).map((row) => {
+  return ((data as unknown as TimeRecordRow[]) || []).map((row) => {
     const hasTime = row.in || row.out;
     let status: AttendanceRecord["status"] = "absent";
     if (hasTime) {
       status = row.in && row.out ? "present" : "halfday";
     }
 
+    const per = Array.isArray(row.personnel) ? row.personnel[0] : row.personnel;
     return {
       id: row.id,
       employee_id: row.per_id,
-      employee_name: row.personnel
-        ? `${row.personnel.last_name}, ${row.personnel.first_name}`
-        : "—",
+      employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
       date: row.date,
       in: row.in,
       out: row.out,

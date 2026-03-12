@@ -1,5 +1,11 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
-import type { TimeSlotSchedule } from "@/types/hr.types";
+import type {
+  TimeSlotSchedule,
+  DeductionType,
+  PayrollPeriod,
+  PayrollEntry,
+  PaySlipDeduction,
+} from "@/types/hr.types";
 
 export interface Office {
   id: string;
@@ -937,4 +943,372 @@ export const insertTimeRecord = async (params: {
   }
 
   return { success: true };
+};
+
+// =============================================================================
+// PAYROLL & DEDUCTION SERVICES
+// =============================================================================
+
+/**
+ * Fetch all deduction types from hr.deduction_type
+ */
+export const fetchDeductionTypes = async (): Promise<DeductionType[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("deduction_type")
+    .select(
+      "id, code, description, computation_type, default_rate, is_mandatory, is_active",
+    )
+    .eq("is_active", true)
+    .order("code");
+
+  if (error) {
+    console.error("Error fetching deduction types:", error);
+    return [];
+  }
+
+  return (data || []).map((d) => ({
+    id: d.id as string,
+    code: d.code as string,
+    description: d.description as string,
+    computation_type: d.computation_type as DeductionType["computation_type"],
+    default_rate: Number(d.default_rate) || 0,
+    is_mandatory: d.is_mandatory as boolean,
+    is_active: d.is_active as boolean,
+  }));
+};
+
+/**
+ * Fetch all payroll periods from hr.payroll
+ */
+export const fetchPayrollPeriods = async (): Promise<PayrollPeriod[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("payroll")
+    .select("*")
+    .order("date_from", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error("Error fetching payroll periods:", error);
+    return [];
+  }
+
+  return (data || []).map((p) => ({
+    id: p.id as string,
+    period_name: p.period_name as string,
+    date_from: p.date_from as string,
+    date_to: p.date_to as string,
+    fiscal_year: Number(p.fiscal_year),
+    fund_type: p.fund_type as string,
+    total_amount: Number(p.total_amount) || 0,
+    status: p.status as PayrollPeriod["status"],
+    prepared_by: (p.prepared_by as string) ?? null,
+    certified_by: (p.certified_by as string) ?? null,
+    approved_by: (p.approved_by as string) ?? null,
+    date_prepared: (p.date_prepared as string) ?? null,
+    date_certified: (p.date_certified as string) ?? null,
+    date_approved: (p.date_approved as string) ?? null,
+    created_at: p.created_at as string,
+  }));
+};
+
+/**
+ * Fetch pay slips with nested deductions and employee info.
+ * Optionally filter by payroll_id through the junction table.
+ */
+export const fetchPaySlips = async (): Promise<PayrollEntry[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("pay_slip")
+    .select(
+      `
+      id, per_id, period_start, period_end, period_type,
+      gross_amount, total_deductions, net_amount,
+      status, created_at,
+      personnel:per_id ( first_name, last_name ),
+      pay_slip_deductions (
+        id, deduction_type_id, amount, remarks,
+        deduction_type:deduction_type_id ( code, description )
+      )
+    `,
+    )
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    console.error("Error fetching pay slips:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const per = row.personnel as
+      | Record<string, string>
+      | Record<string, string>[]
+      | null;
+    const person = Array.isArray(per) ? per[0] : per;
+    const rawDeds = (row.pay_slip_deductions ?? []) as Record<
+      string,
+      unknown
+    >[];
+
+    const deductions: PaySlipDeduction[] = rawDeds.map((d) => {
+      const dt = d.deduction_type as
+        | Record<string, string>
+        | Record<string, string>[]
+        | null;
+      const dtObj = Array.isArray(dt) ? dt[0] : dt;
+      return {
+        id: d.id as string,
+        deduction_type_id: d.deduction_type_id as string,
+        code: dtObj?.code ?? "",
+        description: dtObj?.description ?? "",
+        amount: Number(d.amount) || 0,
+        remarks: (d.remarks as string) ?? "",
+      };
+    });
+
+    return {
+      id: row.id as string,
+      employee_id: row.per_id as string,
+      employee_name: person ? `${person.last_name}, ${person.first_name}` : "—",
+      period_start: row.period_start as string,
+      period_end: row.period_end as string,
+      period_type: row.period_type as PayrollEntry["period_type"],
+      gross_amount: Number(row.gross_amount) || 0,
+      total_deductions: Number(row.total_deductions) || 0,
+      net_amount: Number(row.net_amount) || 0,
+      deductions,
+      status: row.status as PayrollEntry["status"],
+      created_at: row.created_at as string,
+    };
+  });
+};
+
+/**
+ * Fetch remittance summary — pay_slip_deductions grouped by deduction type,
+ * joined with pay_slip for period info.
+ */
+export const fetchRemittanceSummary = async () => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("pay_slip_deductions")
+    .select(
+      `
+      id, deduction_type_id, amount, remarks,
+      deduction_type:deduction_type_id ( code, description ),
+      pay_slip:pay_slip_id (
+        period_start, period_end, status,
+        personnel:per_id ( first_name, last_name )
+      )
+    `,
+    )
+    .order("deduction_type_id");
+
+  if (error) {
+    console.error("Error fetching remittance data:", error);
+    return [];
+  }
+
+  return data || [];
+};
+
+// =============================================================================
+// PER-EMPLOYEE PROFILE QUERIES
+// =============================================================================
+
+export interface ServiceRecord {
+  id: string;
+  pos_id: string | null;
+  position_title: string | null;
+  o_id: string | null;
+  office_name: string | null;
+  record_type:
+    | "appointment"
+    | "promotion"
+    | "transfer"
+    | "reinstatement"
+    | "reappointment"
+    | "separation"
+    | "step_increment";
+  appointment_status: string | null;
+  monthly_salary: number;
+  effective_date: string;
+  end_date: string | null;
+  separation_type: string | null;
+  remarks: string;
+  created_at: string;
+}
+
+export const fetchServiceRecords = async (
+  perId: string,
+): Promise<ServiceRecord[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("service_record")
+    .select(
+      `
+      id, pos_id, o_id, record_type, appointment_status,
+      monthly_salary, effective_date, end_date, separation_type, remarks, created_at,
+      position:pos_id ( description ),
+      office:o_id ( description )
+    `,
+    )
+    .eq("per_id", perId)
+    .order("effective_date", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching service records:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const pos = row.position as
+      | Record<string, string>
+      | Record<string, string>[]
+      | null;
+    const posObj = Array.isArray(pos) ? pos[0] : pos;
+    const off = row.office as
+      | Record<string, string>
+      | Record<string, string>[]
+      | null;
+    const offObj = Array.isArray(off) ? off[0] : off;
+    return {
+      id: row.id as string,
+      pos_id: (row.pos_id as string) || null,
+      position_title: posObj?.description ?? null,
+      o_id: (row.o_id as string) || null,
+      office_name: offObj?.description ?? null,
+      record_type: row.record_type as ServiceRecord["record_type"],
+      appointment_status: (row.appointment_status as string) || null,
+      monthly_salary: Number(row.monthly_salary) || 0,
+      effective_date: row.effective_date as string,
+      end_date: (row.end_date as string) || null,
+      separation_type: (row.separation_type as string) || null,
+      remarks: (row.remarks as string) || "",
+      created_at: row.created_at as string,
+    };
+  });
+};
+
+/**
+ * Fetch leave applications for a specific personnel member.
+ */
+export const fetchPersonnelLeaveApplications = async (perId: string) => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("personnel_leave_out")
+    .select(
+      `
+      id, applied_date, approved_date, pay_amount, credits, status, remarks,
+      leave_out_subtype:los_id ( code, description )
+    `,
+    )
+    .eq("per_id", perId)
+    .order("applied_date", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error("Error fetching personnel leave applications:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const sub = row.leave_out_subtype as
+      | Record<string, string>
+      | Record<string, string>[]
+      | null;
+    const subObj = Array.isArray(sub) ? sub[0] : sub;
+    return {
+      id: row.id as string,
+      applied_date: row.applied_date as string,
+      approved_date: (row.approved_date as string) || null,
+      leave_type: subObj?.code ?? "—",
+      leave_type_desc: subObj?.description ?? "—",
+      credits: Number(row.credits) || 0,
+      pay_amount: Number(row.pay_amount) || 0,
+      status: row.status as string,
+      remarks: (row.remarks as string) || "",
+    };
+  });
+};
+
+/**
+ * Fetch pay slips for a specific personnel member.
+ */
+export const fetchPersonnelPaySlips = async (
+  perId: string,
+): Promise<PayrollEntry[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("pay_slip")
+    .select(
+      `
+      id, per_id, period_start, period_end, period_type,
+      gross_amount, total_deductions, net_amount,
+      status, created_at,
+      pay_slip_deductions (
+        id, deduction_type_id, amount, remarks,
+        deduction_type:deduction_type_id ( code, description )
+      )
+    `,
+    )
+    .eq("per_id", perId)
+    .order("period_start", { ascending: false })
+    .limit(24);
+
+  if (error) {
+    console.error("Error fetching personnel pay slips:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const rawDeds = (row.pay_slip_deductions ?? []) as Record<
+      string,
+      unknown
+    >[];
+    const deductions: PaySlipDeduction[] = rawDeds.map((d) => {
+      const dt = d.deduction_type as
+        | Record<string, string>
+        | Record<string, string>[]
+        | null;
+      const dtObj = Array.isArray(dt) ? dt[0] : dt;
+      return {
+        id: d.id as string,
+        deduction_type_id: d.deduction_type_id as string,
+        code: dtObj?.code ?? "",
+        description: dtObj?.description ?? "",
+        amount: Number(d.amount) || 0,
+        remarks: (d.remarks as string) ?? "",
+      };
+    });
+    return {
+      id: row.id as string,
+      employee_id: row.per_id as string,
+      employee_name: "",
+      period_start: row.period_start as string,
+      period_end: row.period_end as string,
+      period_type: row.period_type as PayrollEntry["period_type"],
+      gross_amount: Number(row.gross_amount) || 0,
+      total_deductions: Number(row.total_deductions) || 0,
+      net_amount: Number(row.net_amount) || 0,
+      deductions,
+      status: row.status as PayrollEntry["status"],
+      created_at: row.created_at as string,
+    };
+  });
 };
