@@ -428,6 +428,18 @@ export interface LeaveSubtype {
   id: string;
   description: string;
   code: string;
+  /** lot_id — the leave_out_type UUID this subtype belongs to */
+  lot_id: string;
+}
+
+export interface LeaveCredit {
+  id: string;
+  lot_id: string;
+  lot_description: string;
+  begin_balance: number;
+  earned: number;
+  current_balance: number;
+  is_available: boolean;
 }
 
 export interface LeaveApplicationFormData {
@@ -440,6 +452,10 @@ export interface LeaveApplicationFormData {
   status: "pending" | "approved" | "denied" | "cancelled";
   approved_date?: string | null;
   approved_by?: string | null;
+  /** Specific calendar dates off (for leave_out_dates) */
+  leave_dates?: string[];
+  /** personnel_leave_credits.id — needed to link dates to the right credit row */
+  plc_id?: string;
 }
 
 /**
@@ -451,7 +467,7 @@ export const fetchLeaveSubtypes = async (): Promise<LeaveSubtype[]> => {
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("leave_out_subtype")
-    .select("id, description, code")
+    .select("id, description, code, lot_id")
     .eq("is_active", true)
     .order("description");
 
@@ -525,7 +541,8 @@ export const fetchLeaveApplications = async () => {
 };
 
 /**
- * Fetch all personnel for leave application dropdown
+ * Fetch all personnel for leave application dropdown.
+ * Also returns monthly_salary via the position→salary_rate→rate chain.
  */
 export const fetchPersonnelForLeave = async () => {
   if (!isSupabaseConfigured() || !supabase) return [];
@@ -533,7 +550,16 @@ export const fetchPersonnelForLeave = async () => {
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("personnel")
-    .select("id, first_name, middle_name, last_name")
+    .select(
+      `
+      id, first_name, middle_name, last_name,
+      position:pos_id (
+        salary_rate:sr_id (
+          rate:rate_id ( amount )
+        )
+      )
+    `,
+    )
     .eq("is_active", true)
     .order("last_name");
 
@@ -542,10 +568,18 @@ export const fetchPersonnelForLeave = async () => {
     return [];
   }
 
-  return (data || []).map((p: Record<string, string>) => ({
-    id: p.id,
-    name: `${p.last_name}, ${p.first_name} ${p.middle_name || ""}`.trim(),
-  }));
+  return (data || []).map((p: Record<string, unknown>) => {
+    // Drill through the join chain: position → salary_rate → rate → amount
+    const pos = p.position as Record<string, unknown> | null;
+    const sr = pos?.salary_rate as Record<string, unknown> | null;
+    const rate = sr?.rate as Record<string, unknown> | null;
+    const monthly_salary = rate ? Number(rate.amount) || 0 : 0;
+    return {
+      id: p.id as string,
+      name: `${p.last_name}, ${p.first_name} ${(p.middle_name as string) || ""}`.trim(),
+      monthly_salary,
+    };
+  });
 };
 
 /**
@@ -568,7 +602,84 @@ export const fetchPersonnelIdByUserId = async (
 };
 
 /**
- * Create a new leave application
+ * Fetch leave credit balances for a specific employee.
+ * Joins leave_out_type to get the type description.
+ */
+export const fetchLeaveCredits = async (
+  perId: string,
+): Promise<LeaveCredit[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("personnel_leave_credits")
+    .select(
+      `
+      id, lot_id, begin_balance, earned, current_balance, is_available,
+      leave_out_type:lot_id ( description )
+    `,
+    )
+    .eq("per_id", perId)
+    .eq("is_available", true);
+
+  if (error) {
+    console.error("Error fetching leave credits:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => {
+    const lot = row.leave_out_type as
+      | Record<string, string>
+      | Record<string, string>[]
+      | null;
+    const lotObj = Array.isArray(lot) ? lot[0] : lot;
+    return {
+      id: row.id as string,
+      lot_id: row.lot_id as string,
+      lot_description: (lotObj?.description ?? "—") as string,
+      begin_balance: Number(row.begin_balance) || 0,
+      earned: Number(row.earned) || 0,
+      current_balance: Number(row.current_balance) || 0,
+      is_available: Boolean(row.is_available),
+    };
+  });
+};
+
+/**
+ * Insert specific leave dates into hr.leave_out_dates.
+ * Each row triggers deduct_leave_credit automatically (DB trigger).
+ */
+export const insertLeaveDates = async (
+  leaveOutId: string,
+  dates: string[], // ISO date strings, e.g. ["2026-03-13", "2026-03-14"]
+  plcId: string, // personnel_leave_credits.id for the matching credit row
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const rows = dates.map((d) => ({
+    plaid: leaveOutId,
+    plc_id: plcId,
+    date: d,
+  }));
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("leave_out_dates")
+    .insert(rows);
+
+  if (error) {
+    console.error("Error inserting leave dates:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Create a new leave application, then insert leave_out_dates rows (which
+ * trigger credit deduction automatically via trg_deduct_leave_credit).
  */
 export const createLeaveApplication = async (
   leaveData: LeaveApplicationFormData,
@@ -577,7 +688,10 @@ export const createLeaveApplication = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
-  const { error } = await (supabase as NonNullable<typeof supabase>)
+  // 1. Insert the leave application header
+  const { data: inserted, error } = await (
+    supabase as NonNullable<typeof supabase>
+  )
     .schema("hr")
     .from("personnel_leave_out")
     .insert([
@@ -590,11 +704,35 @@ export const createLeaveApplication = async (
         status: leaveData.status,
         remarks: leaveData.remarks,
       },
-    ]);
+    ])
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !inserted) {
     console.error("Error creating leave application:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: error?.message ?? "Insert failed" };
+  }
+
+  // 2. If specific dates + credit row were provided, insert leave_out_dates
+  //    The DB trigger trg_deduct_leave_credit fires per row and deducts the credit.
+  if (leaveData.leave_dates?.length && leaveData.plc_id) {
+    const datesResult = await insertLeaveDates(
+      inserted.id,
+      leaveData.leave_dates,
+      leaveData.plc_id,
+    );
+    if (!datesResult.success) {
+      // Rollback: delete the header we just created
+      await (supabase as NonNullable<typeof supabase>)
+        .schema("hr")
+        .from("personnel_leave_out")
+        .delete()
+        .eq("id", inserted.id);
+      return {
+        success: false,
+        error: `Leave filed but date deduction failed: ${datesResult.error}`,
+      };
+    }
   }
 
   return { success: true };

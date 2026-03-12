@@ -51,6 +51,8 @@ const LeaveManagement = () => {
       pay_amount: data.pay_amount,
       remarks: data.remarks,
       status: data.status,
+      leave_dates: data.leave_dates,
+      plc_id: data.plc_id,
     };
     const result = await createLeaveApplication(payload);
     setIsSaving(false);
