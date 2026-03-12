@@ -43,20 +43,20 @@ const Login = () => {
   return (
     <div className="relative flex min-h-screen overflow-hidden">
       {/* Full-screen LightRays background */}
-      <div className="absolute inset-0 z-0 bg-primary">
+      <div className="absolute inset-0 z-0 bg-[#1a0000]">
         <LightRays
           raysOrigin="top-center"
-          raysColor="#ffffff"
+          raysColor="#ff4444"
           raysSpeed={1}
-          lightSpread={0.5}
-          rayLength={3}
+          lightSpread={0.8}
+          rayLength={5}
           followMouse={true}
-          mouseInfluence={0.1}
+          mouseInfluence={0.15}
           noiseAmount={0}
           distortion={0}
           pulsating={false}
-          fadeDistance={1}
-          saturation={1}
+          fadeDistance={0.6}
+          saturation={1.2}
         />
       </div>
 
@@ -82,8 +82,10 @@ const Login = () => {
       </div>
 
       {/* Right Section - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center bg-surface p-8 relative z-10">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 relative z-10">
+        {/* Gradient overlay: transparent maroon on left edge fading to white */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/60 via-white/85 to-white/95 backdrop-blur-[2px]" />
+        <div className="w-full max-w-md relative z-10">
           {/* Mobile logo - shown on small screens */}
           <div className="flex flex-col items-center mb-8 lg:hidden">
             {logoSrc && (
@@ -93,28 +95,28 @@ const Login = () => {
                 className="w-28 h-28 object-contain mb-4 rounded-full"
               />
             )}
-            <h1 className="text-3xl font-bold text-primary">LGU IMS System</h1>
+            <h1 className="text-3xl font-bold text-[#7a1a1a]">LGU IMS System</h1>
           </div>
 
           <div className="hidden lg:block mb-8">
-            <h1 className="text-3xl font-bold text-primary">Welcome Back</h1>
-            <p className="text-muted mt-2">Sign in to your account to continue</p>
+            <h1 className="text-3xl font-bold text-[#7a1a1a]">Welcome Back</h1>
+            <p className="text-gray-500 mt-2">Sign in to your account to continue</p>
           </div>
 
           <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-2">
               <label
-                className="text-sm font-medium text-foreground"
+                className="text-sm font-medium text-gray-900"
                 htmlFor="email"
               >
                 Email
               </label>
               <input
                 className={cn(
-                  "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
-                  "bg-surface text-foreground placeholder:text-muted",
+                  "w-full px-4 py-3.5 border border-gray-300 rounded-lg text-sm",
+                  "bg-white text-gray-900 placeholder:text-gray-400",
                   "transition-all duration-200",
-                  "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
+                  "focus:outline-none focus:border-[#7a1a1a] focus:ring-2 focus:ring-[#7a1a1a]/10",
                 )}
                 id="email"
                 type="email"
@@ -128,17 +130,17 @@ const Login = () => {
 
             <div className="flex flex-col gap-2">
               <label
-                className="text-sm font-medium text-foreground"
+                className="text-sm font-medium text-gray-900"
                 htmlFor="password"
               >
                 Password
               </label>
               <input
                 className={cn(
-                  "w-full px-4 py-3.5 border border-border rounded-lg text-sm",
-                  "bg-surface text-foreground placeholder:text-muted",
+                  "w-full px-4 py-3.5 border border-gray-300 rounded-lg text-sm",
+                  "bg-white text-gray-900 placeholder:text-gray-400",
                   "transition-all duration-200",
-                  "focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10",
+                  "focus:outline-none focus:border-[#7a1a1a] focus:ring-2 focus:ring-[#7a1a1a]/10",
                 )}
                 id="password"
                 type="password"
@@ -151,7 +153,7 @@ const Login = () => {
             </div>
 
             {error && (
-              <div className="px-4 py-3 bg-danger/10 border border-danger/20 rounded-lg flex items-start gap-3 text-sm text-danger">
+              <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-sm text-red-700">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
@@ -160,9 +162,9 @@ const Login = () => {
             <button
               className={cn(
                 "w-full py-3.5 mt-2 rounded-lg text-base font-semibold",
-                "bg-primary text-white",
+                "bg-[#7a1a1a] text-white",
                 "transition-all duration-200",
-                "hover:bg-primary-light hover:-translate-y-0.5 hover:shadow-xl",
+                "hover:bg-[#5c1313] hover:-translate-y-0.5 hover:shadow-xl",
                 "active:translate-y-0",
                 "disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none",
               )}
@@ -173,23 +175,23 @@ const Login = () => {
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-background rounded-lg border border-border">
-            <div className="flex items-center gap-2 font-semibold text-sm text-primary mb-2">
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-2 font-semibold text-sm text-[#7a1a1a] mb-2">
               <Lightbulb className="w-4 h-4" />
               <span>Getting Started:</span>
             </div>
-            <p className="text-sm text-muted leading-relaxed">
+            <p className="text-sm text-gray-500 leading-relaxed">
               Use your Supabase account credentials to login. If you don't have
               an account, contact your administrator.
             </p>
           </div>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-muted">
+            <p className="text-sm text-gray-500">
               Need help?{" "}
               <Link
                 to="/register"
-                className="font-semibold text-primary hover:underline transition-colors"
+                className="font-semibold text-[#7a1a1a] hover:underline transition-colors"
               >
                 Request an account
               </Link>
