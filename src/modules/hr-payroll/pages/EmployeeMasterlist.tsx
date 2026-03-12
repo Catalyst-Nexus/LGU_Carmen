@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   PageHeader,
   StatsRow,
@@ -6,7 +6,6 @@ import {
   ActionsBar,
   PrimaryButton,
   DataTable,
-  Tabs,
   IconButton,
 } from "@/components/ui";
 import {
@@ -16,26 +15,54 @@ import {
   Download,
   Link2,
   Link2Off,
+  Pencil,
+  Eye,
+  MoreHorizontal,
 } from "lucide-react";
 import type { Employee } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
-import { createEmployee } from "@/services/hrService";
+import { createEmployee, updateEmployee } from "@/services/hrService";
 import type { EmployeeFormData } from "@/services/hrService";
 import LinkAccountDialog from "../components/LinkAccountDialog";
 import EmployeeDialog from "../components/EmployeeDialog";
+import EmployeeProfile from "../components/EmployeeProfile";
 
 // Raw row shape returned by the Supabase hr.personnel query
 interface PersonnelRow {
   id: string;
+  employee_no: string;
   first_name: string;
   middle_name: string;
   last_name: string;
+  suffix: string;
+  birth_date: string | null;
+  civil_status: string | null;
+  blood_type: string | null;
+  contact_number: string | null;
+  address: string;
+  gsis_number: string | null;
+  philhealth_number: string | null;
+  pagibig_number: string | null;
+  tin: string | null;
   employment_status: Employee["employment_status"];
   date_hired: string;
+  separation_date: string | null;
+  separation_type: string | null;
   is_active: boolean;
   created_at: string;
   user_id: string | null;
-  position: { id: string; description: string; item_no: string } | null;
+  position: {
+    id: string;
+    description: string;
+    item_no: string;
+    salary_grade: number | null;
+    salary_rate:
+      | {
+          rate: { step: number | null } | { step: number | null }[] | null;
+        }
+      | { rate: { step: number | null } | { step: number | null }[] | null }[]
+      | null;
+  } | null;
   office: { id: string; description: string } | null;
 }
 
@@ -47,9 +74,15 @@ const fetchPersonnel = async (): Promise<Employee[]> => {
     .from("personnel")
     .select(
       `
-      id, first_name, middle_name, last_name,
-      employment_status, date_hired, is_active, created_at, user_id,
-      position:pos_id ( id, description, item_no ),
+      id, employee_no, first_name, middle_name, last_name, suffix,
+      birth_date, civil_status, blood_type, contact_number, address,
+      gsis_number, philhealth_number, pagibig_number, tin,
+      employment_status, date_hired, separation_date, separation_type,
+      is_active, created_at, user_id,
+      position:pos_id (
+        id, description, item_no, salary_grade,
+        salary_rate:sr_id ( rate:rate_id ( step ) )
+      ),
       office:o_id ( id, description )
     `,
     )
@@ -63,18 +96,33 @@ const fetchPersonnel = async (): Promise<Employee[]> => {
   return ((data as unknown as PersonnelRow[]) || []).map((row) => {
     const pos = Array.isArray(row.position) ? row.position[0] : row.position;
     const off = Array.isArray(row.office) ? row.office[0] : row.office;
+
+    // Drill: position → salary_rate → rate → step
+    const srRaw = pos?.salary_rate;
+    const srObj = Array.isArray(srRaw) ? srRaw[0] : srRaw;
+    const rateRaw = srObj?.rate;
+    const rateObj = Array.isArray(rateRaw) ? rateRaw[0] : rateRaw;
+    const step = (rateObj?.step as number | null) ?? null;
+
     return {
       id: row.id,
-      employee_number: pos?.item_no ?? "—",
+      employee_no: row.employee_no,
+      plantilla_item_no: pos?.item_no ?? "—",
       first_name: row.first_name,
       middle_name: row.middle_name,
       last_name: row.last_name,
+      // Extra fields for the dialog (cast via unknown since Employee interface is slim)
+      ...(row as unknown as Record<string, unknown>),
       position_id: pos?.id ?? "",
       position_title: pos?.description ?? "Unassigned",
       office_id: off?.id ?? "",
       office_name: off?.description ?? "Unassigned",
+      salary_grade: pos?.salary_grade ?? null,
+      step,
       employment_status: row.employment_status,
       date_hired: row.date_hired,
+      separation_date: row.separation_date ?? null,
+      separation_type: row.separation_type ?? null,
       is_active: row.is_active,
       created_at: row.created_at,
       user_id: row.user_id,
@@ -85,11 +133,34 @@ const fetchPersonnel = async (): Promise<Employee[]> => {
 const EmployeeMasterlist = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
   const [linkEmployee, setLinkEmployee] = useState<Employee | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
+    null,
+  );
   const [isSaving, setIsSaving] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Filter states
+  const [filterOffice, setFilterOffice] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterSG, setFilterSG] = useState("");
+  const [filterPosition, setFilterPosition] = useState("");
 
   const loadEmployees = useCallback(async () => {
     setIsLoading(true);
@@ -109,18 +180,66 @@ const EmployeeMasterlist = () => {
     );
   };
 
-  const filtered = employees.filter((e) => {
-    const matchSearch =
-      `${e.first_name} ${e.last_name}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      e.employee_number.toLowerCase().includes(search.toLowerCase()) ||
-      e.position_title.toLowerCase().includes(search.toLowerCase());
-    if (activeTab === "all") return matchSearch;
-    if (activeTab === "active") return matchSearch && e.is_active;
-    if (activeTab === "inactive") return matchSearch && !e.is_active;
-    return matchSearch && e.employment_status === activeTab;
-  });
+  // Unique values for filter dropdowns
+  const uniqueOffices = useMemo(
+    () =>
+      [...new Set(employees.map((e) => e.office_name).filter(Boolean))].sort(),
+    [employees],
+  );
+  const uniqueSGs = useMemo(
+    () =>
+      [
+        ...new Set(
+          employees
+            .filter((e) => e.salary_grade != null)
+            .map((e) => `SG-${e.salary_grade}`),
+        ),
+      ].sort((a, b) => parseInt(a.split("-")[1]) - parseInt(b.split("-")[1])),
+    [employees],
+  );
+  const uniquePositions = useMemo(
+    () =>
+      [
+        ...new Set(employees.map((e) => e.position_title).filter(Boolean)),
+      ].sort(),
+    [employees],
+  );
+
+  const filtered = useMemo(() => {
+    return employees.filter((e) => {
+      const raw = e as unknown as Record<string, unknown>;
+      const label = e.is_active
+        ? "Active"
+        : (raw.separation_date as string)
+          ? "Separated"
+          : "Inactive";
+
+      const q = search.toLowerCase();
+      const matchSearch =
+        !q ||
+        `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) ||
+        e.employee_no.toLowerCase().includes(q) ||
+        e.position_title.toLowerCase().includes(q);
+
+      return (
+        matchSearch &&
+        (!filterOffice || e.office_name === filterOffice) &&
+        (!filterType || e.employment_status === filterType) &&
+        (!filterStatus || label === filterStatus) &&
+        (!filterSG ||
+          (e.salary_grade != null && `SG-${e.salary_grade}` === filterSG)) &&
+        (!filterPosition || e.position_title === filterPosition)
+      );
+    });
+  }, [
+    employees,
+    search,
+    filterOffice,
+    filterType,
+    filterStatus,
+    filterSG,
+    filterPosition,
+  ]);
 
   // All user_ids currently claimed — used by the dialog to exclude already-linked accounts
   const linkedUserIds = employees
@@ -137,6 +256,28 @@ const EmployeeMasterlist = () => {
     } else {
       alert(result.error || "Failed to add employee");
     }
+  };
+
+  const handleEditEmployee = async (data: EmployeeFormData) => {
+    if (!editEmployee) return;
+    setIsSaving(true);
+    const result = await updateEmployee(editEmployee.id, data);
+    setIsSaving(false);
+    if (result.success) {
+      setEditEmployee(null);
+      loadEmployees();
+    } else {
+      alert(result.error || "Failed to update employee");
+    }
+  };
+
+  // Derive employee status label
+  const getStatusLabel = (e: Employee): "Active" | "Separated" | "Inactive" => {
+    if (!e.is_active) {
+      const sep = (e as unknown as Record<string, unknown>).separation_date;
+      return sep ? "Separated" : "Inactive";
+    }
+    return "Active";
   };
 
   return (
@@ -170,17 +311,90 @@ const EmployeeMasterlist = () => {
         />
       </StatsRow>
 
-      <Tabs
-        tabs={[
-          { id: "all", label: "All" },
-          { id: "permanent", label: "Permanent" },
-          { id: "casual", label: "Casual" },
-          { id: "contractual", label: "Contractual" },
-          { id: "job_order", label: "Job Order" },
-        ]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <select
+          value={filterOffice}
+          onChange={(e) => setFilterOffice(e.target.value)}
+          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
+        >
+          <option value="">All Offices</option>
+          {uniqueOffices.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
+        >
+          <option value="">All Employment Types</option>
+          <option value="permanent">Permanent</option>
+          <option value="casual">Casual</option>
+          <option value="coterminous">Coterminous</option>
+          <option value="contractual">Contractual</option>
+          <option value="job_order">Job Order</option>
+        </select>
+
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
+        >
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Separated">Separated</option>
+        </select>
+
+        <select
+          value={filterSG}
+          onChange={(e) => setFilterSG(e.target.value)}
+          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
+        >
+          <option value="">All Salary Grades</option>
+          {uniqueSGs.map((sg) => (
+            <option key={sg} value={sg}>
+              {sg}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterPosition}
+          onChange={(e) => setFilterPosition(e.target.value)}
+          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
+        >
+          <option value="">All Positions</option>
+          {uniquePositions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+
+        {(filterOffice ||
+          filterType ||
+          filterStatus ||
+          filterSG ||
+          filterPosition) && (
+          <button
+            onClick={() => {
+              setFilterOffice("");
+              setFilterType("");
+              setFilterStatus("");
+              setFilterSG("");
+              setFilterPosition("");
+            }}
+            className="text-xs text-muted hover:text-foreground underline px-2 py-1"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
       <ActionsBar>
         <PrimaryButton onClick={() => setShowAddDialog(true)}>
@@ -200,22 +414,39 @@ const EmployeeMasterlist = () => {
       <DataTable<Employee>
         data={filtered}
         columns={[
-          { key: "employee_number", header: "Item No." },
+          { key: "employee_no", header: "Employee ID" },
+          { key: "plantilla_item_no", header: "Plantilla Item" },
           {
             key: "last_name",
-            header: "Name",
+            header: "Full Name",
             render: (item) => (
               <span>
                 {item.last_name}, {item.first_name}
-                {item.middle_name ? " " + item.middle_name : ""}
+                {item.middle_name ? " " + item.middle_name[0] + "." : ""}
               </span>
             ),
           },
-          { key: "position_title", header: "Position" },
-          { key: "office_name", header: "Office" },
+          { key: "position_title", header: "Position Title" },
+          {
+            key: "salary_grade",
+            header: "SG",
+            render: (item) => (
+              <span>
+                {item.salary_grade != null ? `SG-${item.salary_grade}` : "—"}
+              </span>
+            ),
+          },
+          {
+            key: "step",
+            header: "Step",
+            render: (item) => (
+              <span>{item.step != null ? `Step ${item.step}` : "—"}</span>
+            ),
+          },
+          { key: "office_name", header: "Office / Dept." },
           {
             key: "employment_status",
-            header: "Type",
+            header: "Employment Status",
             render: (item) => (
               <span
                 className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
@@ -230,31 +461,87 @@ const EmployeeMasterlist = () => {
                           : "bg-gray-500/10 text-gray-500"
                 }`}
               >
-                {item.employment_status.replace("_", " ").toUpperCase()}
+                {item.employment_status.replace(/_/g, " ").toUpperCase()}
               </span>
             ),
           },
-          { key: "date_hired", header: "Date Hired" },
+          { key: "date_hired", header: "Appointment Date" },
+          {
+            key: "is_active",
+            header: "Status",
+            render: (item) => {
+              const label = getStatusLabel(item);
+              return (
+                <span
+                  className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
+                    label === "Active"
+                      ? "bg-success/10 text-success"
+                      : label === "Separated"
+                        ? "bg-danger/10 text-danger"
+                        : "bg-gray-500/10 text-gray-500"
+                  }`}
+                >
+                  {label}
+                </span>
+              );
+            },
+          },
           {
             key: "user_id",
-            header: "System Account",
+            header: "Actions",
             render: (item) => (
-              <div className="flex items-center gap-2">
-                {item.user_id ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-success/10 text-success">
-                    <Link2 className="w-3 h-3" /> Linked
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-muted/10 text-muted">
-                    <Link2Off className="w-3 h-3" /> No account
-                  </span>
-                )}
+              <div
+                className="relative"
+                ref={openMenuId === item.id ? menuRef : null}
+              >
                 <IconButton
-                  onClick={() => setLinkEmployee(item)}
-                  title="Manage account link"
+                  onClick={() =>
+                    setOpenMenuId((prev) => (prev === item.id ? null : item.id))
+                  }
+                  title="Actions"
                 >
-                  <Link2 className="w-4 h-4" />
+                  <MoreHorizontal className="w-4 h-4" />
                 </IconButton>
+
+                {openMenuId === item.id && (
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-background border border-border rounded-lg shadow-lg py-1 text-sm">
+                    <button
+                      onClick={() => {
+                        setSelectedEmployee(item);
+                        setOpenMenuId(null);
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+                    >
+                      <Eye className="w-4 h-4 text-primary" />
+                      View Profile
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditEmployee(item);
+                        setOpenMenuId(null);
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit Employee
+                    </button>
+                    <div className="border-t border-border my-1" />
+                    <button
+                      onClick={() => {
+                        setLinkEmployee(item);
+                        setOpenMenuId(null);
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+                    >
+                      {item.user_id ? (
+                        <Link2 className="w-4 h-4 text-success" />
+                      ) : (
+                        <Link2Off className="w-4 h-4 text-muted" />
+                      )}
+                      {item.user_id ? "Manage Account Link" : "Link Account"}
+                    </button>
+                  </div>
+                )}
               </div>
             ),
           },
@@ -262,7 +549,7 @@ const EmployeeMasterlist = () => {
         title={`Employees (${filtered.length})`}
         searchValue={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Search by name, number, or position..."
+        searchPlaceholder="Search by name, ID, or position..."
         emptyMessage={isLoading ? "Loading employees…" : "No employees found."}
       />
 
@@ -273,12 +560,25 @@ const EmployeeMasterlist = () => {
         isLoading={isSaving}
       />
 
+      <EmployeeDialog
+        open={editEmployee !== null}
+        onClose={() => setEditEmployee(null)}
+        onSubmit={handleEditEmployee}
+        employee={editEmployee}
+        isLoading={isSaving}
+      />
+
       <LinkAccountDialog
         open={linkEmployee !== null}
         onClose={() => setLinkEmployee(null)}
         employee={linkEmployee}
         linkedUserIds={linkedUserIds}
         onLinked={handleLinked}
+      />
+
+      <EmployeeProfile
+        employee={selectedEmployee}
+        onClose={() => setSelectedEmployee(null)}
       />
     </div>
   );

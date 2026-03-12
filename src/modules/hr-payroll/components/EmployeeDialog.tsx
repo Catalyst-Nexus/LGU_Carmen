@@ -98,25 +98,20 @@ const EmployeeDialog = ({
 
   useEffect(() => {
     if (employee) {
+      const raw = employee as unknown as Record<string, string>;
       setFirstName(employee.first_name);
       setMiddleName(employee.middle_name);
       setLastName(employee.last_name);
-      setSuffix((employee as Record<string, string>).suffix ?? "");
-      setBirthDate((employee as Record<string, string>).birth_date ?? "");
-      setCivilStatus((employee as Record<string, string>).civil_status ?? "");
-      setBloodType((employee as Record<string, string>).blood_type ?? "");
-      setContactNumber(
-        (employee as Record<string, string>).contact_number ?? "",
-      );
-      setAddress((employee as Record<string, string>).address ?? "");
-      setGsisNumber((employee as Record<string, string>).gsis_number ?? "");
-      setPhilhealthNumber(
-        (employee as Record<string, string>).philhealth_number ?? "",
-      );
-      setPagibigNumber(
-        (employee as Record<string, string>).pagibig_number ?? "",
-      );
-      setTin((employee as Record<string, string>).tin ?? "");
+      setSuffix(raw.suffix ?? "");
+      setBirthDate(raw.birth_date ?? "");
+      setCivilStatus(raw.civil_status ?? "");
+      setBloodType(raw.blood_type ?? "");
+      setContactNumber(raw.contact_number ?? "");
+      setAddress(raw.address ?? "");
+      setGsisNumber(raw.gsis_number ?? "");
+      setPhilhealthNumber(raw.philhealth_number ?? "");
+      setPagibigNumber(raw.pagibig_number ?? "");
+      setTin(raw.tin ?? "");
       setPositionId(employee.position_id);
       setOfficeId(employee.office_id);
       setEmploymentStatus(employee.employment_status);
@@ -201,6 +196,22 @@ const EmployeeDialog = ({
       size="lg"
     >
       <div className="space-y-1">
+        {/* Employee No. badge — read-only, only shown in edit mode */}
+        {employee && (
+          <div className="flex items-center gap-3 bg-muted/20 border border-border rounded-lg px-4 py-2.5 mb-2">
+            <span className="text-xs font-medium text-muted uppercase tracking-wider">
+              Employee No.
+            </span>
+            <span className="font-bold text-foreground">
+              {(employee as unknown as Record<string, string>).employee_no ??
+                "—"}
+            </span>
+            <span className="ml-auto text-xs text-muted italic">
+              Auto-generated · linked to this person's record
+            </span>
+          </div>
+        )}
+
         {/* ═══ SECTION 1 — Personal Information ═══ */}
         <SectionHeading>Personal Information</SectionHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

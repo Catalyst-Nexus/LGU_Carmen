@@ -1,7 +1,9 @@
 export interface Employee {
   id: string;
-  /** Maps to hr.position.item_no */
-  employee_number: string;
+  /** Auto-generated employee number (e.g. EMP-0001). Follows the person, not the position. */
+  employee_no: string;
+  /** Plantilla Item No. from hr.position.item_no — follows the position slot */
+  plantilla_item_no: string;
   first_name: string;
   last_name: string;
   middle_name: string;
@@ -111,7 +113,6 @@ export interface PaySlipDeduction {
 
 export interface PayrollEntry {
   id: string;
-  payroll_period_id: string;
   employee_id: string;
   employee_name: string;
   period_start: string;
@@ -132,7 +133,24 @@ export interface PayrollPeriod {
   date_from: string;
   date_to: string;
   fiscal_year: number;
-  fund_type: "GF" | "SEF" | "LDRRMF" | "SHF" | "DEVFUND" | "TRUST";
+  fund_type: string;
+  total_amount: number;
   status: "draft" | "computed" | "approved" | "released";
+  prepared_by: string | null;
+  certified_by: string | null;
+  approved_by: string | null;
+  date_prepared: string | null;
+  date_certified: string | null;
+  date_approved: string | null;
   created_at: string;
+}
+
+export interface DeductionType {
+  id: string;
+  code: string;
+  description: string;
+  computation_type: "fixed" | "percentage" | "tax_table" | "manual";
+  default_rate: number;
+  is_mandatory: boolean;
+  is_active: boolean;
 }

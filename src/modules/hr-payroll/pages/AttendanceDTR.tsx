@@ -22,13 +22,14 @@ interface TimeRecordRow {
   total_hours: number | null;
   pay_amount: number;
   created_at: string;
-  personnel: {
-    first_name: string;
-    last_name: string;
-  } | null;
-  time_slot_schedule: {
-    description: string;
-  } | null;
+  personnel:
+    | { first_name: string; last_name: string }
+    | { first_name: string; last_name: string }[]
+    | null;
+  time_slot_schedule:
+    | { description: string }
+    | { description: string }[]
+    | null;
 }
 
 const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
@@ -54,18 +55,20 @@ const fetchTimeRecords = async (): Promise<AttendanceRecord[]> => {
     return [];
   }
 
-  return ((data as TimeRecordRow[]) || []).map((row) => {
+  return ((data as unknown as TimeRecordRow[]) || []).map((row) => {
+    const per = Array.isArray(row.personnel) ? row.personnel[0] : row.personnel;
+    const slot = Array.isArray(row.time_slot_schedule)
+      ? row.time_slot_schedule[0]
+      : row.time_slot_schedule;
     return {
       id: row.id,
       employee_id: row.per_id,
-      employee_name: row.personnel
-        ? `${row.personnel.last_name}, ${row.personnel.first_name}`
-        : "—",
+      employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
       date: row.date,
       in: row.in,
       out: row.out,
       time_slot_id: row.time_slot_id,
-      time_slot_desc: row.time_slot_schedule?.description ?? null,
+      time_slot_desc: slot?.description ?? null,
       time_identifier: (row.time_identifier ?? 1) as 1 | 2,
       total_hours: row.total_hours ?? 0,
       pay_amount: row.pay_amount,
