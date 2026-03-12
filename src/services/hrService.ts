@@ -898,6 +898,173 @@ export const deleteTimeSlotSchedule = async (
   return { success: true };
 };
 
+// =============================================================================
+// DAILY PAY / PAYROLL COMPUTATION
+// =============================================================================
+
+/**
+ * One "work session" = a paired IN + OUT entry on the same date × slot.
+ * The OUT record carries total_hours and pay_amount (set by DB triggers).
+ */
+export interface DailyPayRecord {
+  /** Composite key: per_id_date_slotId — satisfies DataTable<T extends { id }> */
+  id: string;
+  per_id: string;
+  employee_name: string;
+  date: string;
+  time_slot_id: string | null;
+  time_slot_desc: string | null;
+  /** Clock-in time from the IN record */
+  time_in: string | null;
+  /** Clock-out time from the OUT record */
+  time_out: string | null;
+  /** Trigger-computed hours (0 when OUT not yet recorded) */
+  total_hours: number;
+  /** Trigger-computed pay (0 when OUT not yet recorded) */
+  pay_amount: number;
+  /** False when only the IN record exists (employee hasn't clocked out yet) */
+  has_out: boolean;
+}
+
+/** Per-employee summary across an entire payroll period */
+export interface EmployeePaySummary {
+  /** Equals per_id — satisfies DataTable<T extends { id }> */
+  id: string;
+  per_id: string;
+  employee_name: string;
+  /** Number of complete sessions (IN + OUT pair) */
+  days_worked: number;
+  total_hours: number;
+  gross_pay: number;
+}
+
+interface RawTimeRow {
+  id: string;
+  per_id: string;
+  date: string;
+  in: string | null;
+  out: string | null;
+  time_slot_id: string | null;
+  time_identifier: number | null;
+  total_hours: number | null;
+  pay_amount: number;
+  personnel:
+    | { first_name: string; last_name: string }
+    | { first_name: string; last_name: string }[]
+    | null;
+  time_slot_schedule: { description: string } | { description: string }[] | null;
+}
+
+/**
+ * Fetch all time records for a period and build paired IN/OUT sessions.
+ * Pay amounts are trigger-computed on the DB — this function only reads.
+ */
+export const fetchDailyPayRecords = async (
+  periodStart: string,
+  periodEnd: string,
+): Promise<DailyPayRecord[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("time_record")
+    .select(
+      `id, per_id, date, "in", "out",
+       time_slot_id, time_identifier, total_hours, pay_amount,
+       personnel:per_id ( first_name, last_name ),
+       time_slot_schedule:time_slot_id ( description )`,
+    )
+    .gte("date", periodStart)
+    .lte("date", periodEnd)
+    .order("date", { ascending: true })
+    .order("per_id", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching daily pay records:", error);
+    return [];
+  }
+
+  // Pair IN and OUT rows by (per_id, date, time_slot_id)
+  const sessions = new Map<string, DailyPayRecord>();
+
+  for (const raw of (data as unknown as RawTimeRow[]) || []) {
+    const key = `${raw.per_id}_${raw.date}_${raw.time_slot_id ?? "null"}`;
+    const p = Array.isArray(raw.personnel) ? raw.personnel[0] : raw.personnel;
+    const sl = Array.isArray(raw.time_slot_schedule)
+      ? raw.time_slot_schedule[0]
+      : raw.time_slot_schedule;
+    const emp = p ? `${p.last_name}, ${p.first_name}` : "—";
+
+    const existing: DailyPayRecord = sessions.get(key) ?? {
+      id: key,
+      per_id: raw.per_id,
+      employee_name: emp,
+      date: raw.date,
+      time_slot_id: raw.time_slot_id,
+      time_slot_desc: sl?.description ?? null,
+      time_in: null,
+      time_out: null,
+      total_hours: 0,
+      pay_amount: 0,
+      has_out: false,
+    };
+
+    if ((raw.time_identifier ?? 1) === 1) {
+      existing.time_in = raw.in;
+    } else {
+      existing.time_out = raw.out;
+      existing.total_hours = raw.total_hours ?? 0;
+      existing.pay_amount = raw.pay_amount;
+      existing.has_out = true;
+    }
+
+    sessions.set(key, existing);
+  }
+
+  return Array.from(sessions.values()).sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.employee_name.localeCompare(b.employee_name),
+  );
+};
+
+/**
+ * Summarise pay by employee for a period.
+ * Reads from the same time_record table — aggregation done in TypeScript
+ * so no custom DB function is needed.
+ */
+export const fetchEmployeePaySummaries = async (
+  periodStart: string,
+  periodEnd: string,
+): Promise<EmployeePaySummary[]> => {
+  const records = await fetchDailyPayRecords(periodStart, periodEnd);
+
+  const byEmployee = new Map<string, EmployeePaySummary>();
+
+  for (const r of records) {
+    const existing: EmployeePaySummary = byEmployee.get(r.per_id) ?? {
+      id: r.per_id,
+      per_id: r.per_id,
+      employee_name: r.employee_name,
+      days_worked: 0,
+      total_hours: 0,
+      gross_pay: 0,
+    };
+
+    if (r.has_out) {
+      existing.days_worked += 1;
+      existing.total_hours = Math.round((existing.total_hours + r.total_hours) * 100) / 100;
+      existing.gross_pay = Math.round((existing.gross_pay + r.pay_amount) * 100) / 100;
+    }
+
+    byEmployee.set(r.per_id, existing);
+  }
+
+  return Array.from(byEmployee.values()).sort((a, b) =>
+    a.employee_name.localeCompare(b.employee_name),
+  );
+};
+
 /**
  * Insert a time record (IN or OUT) for an employee.
  * When time_identifier=2 (OUT), the DB trigger will auto-calculate total_hours.
