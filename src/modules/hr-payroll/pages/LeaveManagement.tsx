@@ -8,17 +8,21 @@ import {
   DataTable,
   Tabs,
 } from "@/components/ui";
-import { CalendarOff, Plus, RefreshCw } from "lucide-react";
+import { CalendarOff, Plus, RefreshCw, Check, X, Ban } from "lucide-react";
 import type { LeaveApplication } from "@/types/hr.types";
 import {
   createLeaveApplication,
   fetchLeaveApplications,
+  updateLeaveApplication,
+  fetchPersonnelIdByUserId,
 } from "@/services/hrService";
 import type { LeaveApplicationFormData } from "@/services/hrService";
+import { useAuthStore } from "@/store/authStore";
 import LeaveDialog from "../components/LeaveDialog";
 import type { LeaveFormData } from "../components/LeaveDialog";
 
 const LeaveManagement = () => {
+  const user = useAuthStore((s) => s.user);
   const [leaves, setLeaves] = useState<LeaveApplication[]>([]);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -42,9 +46,9 @@ const LeaveManagement = () => {
     const payload: LeaveApplicationFormData = {
       per_id: data.per_id,
       los_id: data.los_id,
-      date_from: data.date_from,
-      date_to: data.date_to,
-      days: data.days,
+      applied_date: data.applied_date,
+      credits: data.credits,
+      pay_amount: data.pay_amount,
       remarks: data.remarks,
       status: data.status,
     };
@@ -58,6 +62,27 @@ const LeaveManagement = () => {
     }
   };
 
+  const handleStatusChange = async (
+    id: string,
+    status: "approved" | "denied" | "cancelled",
+  ) => {
+    const updatePayload: Partial<LeaveApplicationFormData> = { status };
+
+    if (status === "approved" && user) {
+      updatePayload.approved_date = new Date().toISOString().split("T")[0];
+      const personnelId = await fetchPersonnelIdByUserId(user.id);
+      if (personnelId) updatePayload.approved_by = personnelId;
+    }
+
+    const result = await updateLeaveApplication(id, updatePayload);
+    if (result.success) {
+      loadLeaves();
+    } else {
+      const action = status === "approved" ? "approve" : status === "denied" ? "deny" : "cancel";
+      alert(result.error || `Failed to ${action} leave`);
+    }
+  };
+
   const filtered = leaves.filter((l) => {
     const matchSearch = l.employee_name
       .toLowerCase()
@@ -65,16 +90,6 @@ const LeaveManagement = () => {
     if (activeTab === "all") return matchSearch;
     return matchSearch && l.status === activeTab;
   });
-
-  const leaveTypeLabel: Record<string, string> = {
-    VL: "Vacation Leave",
-    SL: "Sick Leave",
-    ML: "Maternity Leave",
-    PL: "Paternity Leave",
-    SPL: "Special Privilege Leave",
-    FL: "Forced Leave",
-    CL: "Compensatory Leave",
-  };
 
   return (
     <div className="space-y-6">
@@ -101,6 +116,10 @@ const LeaveManagement = () => {
           value={leaves.filter((l) => l.status === "denied").length}
           color="danger"
         />
+        <StatCard
+          label="Cancelled"
+          value={leaves.filter((l) => l.status === "cancelled").length}
+        />
       </StatsRow>
 
       <Tabs
@@ -109,6 +128,7 @@ const LeaveManagement = () => {
           { id: "pending", label: "Pending" },
           { id: "approved", label: "Approved" },
           { id: "denied", label: "Denied" },
+          { id: "cancelled", label: "Cancelled" },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -133,15 +153,17 @@ const LeaveManagement = () => {
             key: "leave_type",
             header: "Type",
             render: (item) => (
-              <span title={leaveTypeLabel[item.leave_type]}>
+              <span title={item.leave_type_desc}>
                 {item.leave_type}
               </span>
             ),
           },
-          { key: "date_from", header: "From" },
-          { key: "date_to", header: "To" },
-          { key: "days", header: "Days" },
-          { key: "reason", header: "Reason" },
+          { key: "applied_date", header: "Date Filed" },
+          {
+            key: "credits",
+            header: "No. of Days",
+            render: (item) => <span>{item.credits}</span>,
+          },
           {
             key: "status",
             header: "Status",
@@ -160,6 +182,70 @@ const LeaveManagement = () => {
                 {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
               </span>
             ),
+          },
+          {
+            key: "approved_date",
+            header: "Date of Action",
+            render: (item) => (
+              <span>{item.approved_date ?? "—"}</span>
+            ),
+          },
+          {
+            key: "approved_by_name",
+            header: "Approved By",
+            render: (item) => (
+              <span>{item.approved_by_name ?? "—"}</span>
+            ),
+          },
+          {
+            key: "pay_amount",
+            header: "Pay Amount",
+            render: (item) => (
+              <span>
+                {item.pay_amount
+                  ? new Intl.NumberFormat("en-PH", {
+                      style: "currency",
+                      currency: "PHP",
+                    }).format(item.pay_amount)
+                  : "—"}
+              </span>
+            ),
+          },
+          { key: "remarks", header: "Remarks" },
+          {
+            key: "id" as keyof LeaveApplication,
+            header: "Actions",
+            render: (item) =>
+              item.status === "pending" ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleStatusChange(item.id, "approved")}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"
+                    title="Approve"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange(item.id, "denied")}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-danger/10 text-danger hover:bg-danger/20 transition-colors"
+                    title="Deny"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Deny
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange(item.id, "cancelled")}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-500/10 text-gray-500 hover:bg-gray-500/20 transition-colors"
+                    title="Cancel"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs text-muted">—</span>
+              ),
           },
         ]}
         title={`Leave Applications (${filtered.length})`}

@@ -433,11 +433,13 @@ export interface LeaveSubtype {
 export interface LeaveApplicationFormData {
   per_id: string;
   los_id: string;
-  date_from: string;
-  date_to: string;
-  days: number;
+  applied_date: string;
+  credits: number;
+  pay_amount?: number;
   remarks: string;
   status: "pending" | "approved" | "denied" | "cancelled";
+  approved_date?: string | null;
+  approved_by?: string | null;
 }
 
 /**
@@ -472,9 +474,11 @@ export const fetchLeaveApplications = async () => {
     .from("personnel_leave_out")
     .select(
       `
-      id, per_id, los_id, applied_date, credits, status, remarks, created_at,
+      id, per_id, los_id, applied_date, approved_date, approved_by,
+      pay_amount, credits, status, remarks, created_at,
       personnel:per_id ( first_name, last_name ),
-      leave_out_subtype:los_id ( code, description )
+      leave_out_subtype:los_id ( code, description ),
+      approver:approved_by ( first_name, last_name )
     `,
     )
     .order("created_at", { ascending: false })
@@ -496,18 +500,26 @@ export const fetchLeaveApplications = async () => {
       | null;
     const per = Array.isArray(personnel) ? personnel[0] : personnel;
     const sub = Array.isArray(leaveSubtype) ? leaveSubtype[0] : leaveSubtype;
+    const approverData = row.approver as
+      | Record<string, string>[]
+      | Record<string, string>
+      | null;
+    const appr = Array.isArray(approverData) ? approverData[0] : approverData;
     return {
-      id: row.id,
-      employee_id: row.per_id,
+      id: row.id as string,
+      employee_id: row.per_id as string,
       employee_name: per ? `${per.last_name}, ${per.first_name}` : "—",
       leave_type: (sub?.code ?? "—") as string,
-      date_from: row.applied_date,
-      date_to: row.applied_date,
-      days: Number(row.credits) || 0,
-      reason: row.remarks,
-      status: row.status,
-      approved_by: null,
-      created_at: row.created_at,
+      leave_type_desc: (sub?.description ?? "—") as string,
+      applied_date: (row.applied_date as string) ?? "",
+      approved_date: (row.approved_date as string) ?? null,
+      approved_by: (row.approved_by as string) ?? null,
+      approved_by_name: appr ? `${appr.last_name}, ${appr.first_name}` : null,
+      pay_amount: Number(row.pay_amount) || 0,
+      credits: Number(row.credits) || 0,
+      remarks: (row.remarks as string) ?? "",
+      status: row.status as string,
+      created_at: row.created_at as string,
     };
   });
 };
@@ -537,6 +549,25 @@ export const fetchPersonnelForLeave = async () => {
 };
 
 /**
+ * Resolve auth.users UUID → hr.personnel.id for the current logged-in user
+ */
+export const fetchPersonnelIdByUserId = async (
+  userId: string,
+): Promise<string | null> => {
+  if (!isSupabaseConfigured() || !supabase) return null;
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("personnel")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data.id as string;
+};
+
+/**
  * Create a new leave application
  */
 export const createLeaveApplication = async (
@@ -546,29 +577,25 @@ export const createLeaveApplication = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
-  // Create the leave application
-  const { error: leaveError } = await (supabase as NonNullable<typeof supabase>)
+  const { error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")
     .from("personnel_leave_out")
     .insert([
       {
         per_id: leaveData.per_id,
         los_id: leaveData.los_id,
+        applied_date: leaveData.applied_date,
+        credits: leaveData.credits,
+        pay_amount: leaveData.pay_amount ?? 0,
         status: leaveData.status,
         remarks: leaveData.remarks,
-        credits: leaveData.days,
       },
-    ])
-    .select("id")
-    .single();
+    ]);
 
-  if (leaveError) {
-    console.error("Error creating leave application:", leaveError);
-    return { success: false, error: leaveError.message };
+  if (error) {
+    console.error("Error creating leave application:", error);
+    return { success: false, error: error.message };
   }
-
-  // Note: In a real implementation, you'd also insert records into leave_out_dates
-  // for each day between date_from and date_to. This would require additional logic.
 
   return { success: true };
 };
@@ -584,12 +611,19 @@ export const updateLeaveApplication = async (
     return { success: false, error: "Supabase is not configured" };
   }
 
-  const updateData: Record<string, string | number> = {};
+  const updateData: Record<string, string | number | null> = {};
   if (leaveData.per_id) updateData.per_id = leaveData.per_id;
   if (leaveData.los_id) updateData.los_id = leaveData.los_id;
+  if (leaveData.applied_date) updateData.applied_date = leaveData.applied_date;
   if (leaveData.status) updateData.status = leaveData.status;
-  if (leaveData.remarks) updateData.remarks = leaveData.remarks;
-  if (leaveData.days) updateData.credits = leaveData.days;
+  if (leaveData.remarks !== undefined) updateData.remarks = leaveData.remarks;
+  if (leaveData.credits !== undefined) updateData.credits = leaveData.credits;
+  if (leaveData.pay_amount !== undefined)
+    updateData.pay_amount = leaveData.pay_amount;
+  if (leaveData.approved_date !== undefined)
+    updateData.approved_date = leaveData.approved_date;
+  if (leaveData.approved_by !== undefined)
+    updateData.approved_by = leaveData.approved_by;
 
   const { error } = await (supabase as NonNullable<typeof supabase>)
     .schema("hr")

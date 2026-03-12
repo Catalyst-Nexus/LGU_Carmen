@@ -52,33 +52,16 @@ export interface LeaveApplication {
   id: string;
   employee_id: string;
   employee_name: string;
-  leave_type:
-    | "VL"
-    | "SL"
-    | "ML"
-    | "PL"
-    | "SPL"
-    | "FL"
-    | "CL"
-    | "BL"
-    | "LWOP"
-    | "BDAY"
-    | "STL"
-    | "VAWC"
-    | "OB"
-    | "REHAB"
-    | "SPL_MAGNA_CARTA"
-    | "CTO"
-    | "FORCE"
-    | "COMP"
-    | "OT"
-    | "RT";
-  date_from: string;
-  date_to: string;
-  days: number;
-  reason: string;
-  status: "pending" | "approved" | "denied" | "cancelled";
+  leave_type: string;
+  leave_type_desc: string;
+  applied_date: string;
+  approved_date: string | null;
   approved_by: string | null;
+  approved_by_name: string | null;
+  pay_amount: number;
+  credits: number;
+  remarks: string;
+  status: "pending" | "approved" | "denied" | "cancelled";
   created_at: string;
 }
 
