@@ -82,18 +82,10 @@ export interface AttendanceRecord {
   employee_id: string;
   employee_name: string;
   date: string;
-  /** AM in  (maps to hr.time_record.in1)  */
-  in1: string | null;
-  /** AM out (maps to hr.time_record.out1) */
-  out1: string | null;
-  /** PM in  (maps to hr.time_record.in2)  */
-  in2: string | null;
-  /** PM out (maps to hr.time_record.out2) */
-  out2: string | null;
-  /** OT in  */
-  ot_in: string | null;
-  /** OT out */
-  ot_out: string | null;
+  /** Clock-in time (maps to hr.time_record."in") */
+  in: string | null;
+  /** Clock-out time (maps to hr.time_record."out") */
+  out: string | null;
   /** FK to hr.time_slot_schedule */
   time_slot_id: string | null;
   /** Time slot description (joined) */

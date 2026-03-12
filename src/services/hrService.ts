@@ -783,9 +783,9 @@ export const insertTimeRecord = async (params: {
   };
 
   if (params.time_identifier === 1) {
-    row.in1 = params.time;
+    row.in = params.time;
   } else {
-    row.out1 = params.time;
+    row.out = params.time;
   }
 
   const { error } = await (supabase as NonNullable<typeof supabase>)

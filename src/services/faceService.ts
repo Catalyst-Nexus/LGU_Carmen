@@ -200,45 +200,31 @@ export const matchFace = (
 // ── Time Slot Resolution ─────────────────────────────────────────────────────
 
 /**
- * Determine which time_record slot to fill based on current time (CSC rules).
- * AM: 6:00–11:59 → in1 first, then out1
- * PM: 12:00–17:59 → in2 first, then out2
+ * Legacy time slot type — kept for backward compatibility.
+ * With the new time_slot_schedule + time_identifier model these are no longer
+ * used by clockPerson, but other code may still reference them.
  */
-export type TimeSlot = "in1" | "out1" | "in2" | "out2";
+export type TimeSlot = "in" | "out";
 
 const SLOT_LABELS: Record<TimeSlot, string> = {
-  in1: "AM Time-In",
-  out1: "AM Time-Out",
-  in2: "PM Time-In",
-  out2: "PM Time-Out",
+  in: "Time-In",
+  out: "Time-Out",
 };
 
 export const getSlotLabel = (slot: TimeSlot): string => SLOT_LABELS[slot];
 
 interface ExistingRecord {
-  in1: string | null;
-  out1: string | null;
-  in2: string | null;
-  out2: string | null;
+  in: string | null;
+  out: string | null;
 }
 
 export const resolveTimeSlot = (
-  now: Date,
+  _now: Date,
   existing: ExistingRecord | null,
 ): TimeSlot | null => {
-  const hour = now.getHours();
-
-  if (hour < 12) {
-    // Morning
-    if (!existing?.in1) return "in1";
-    if (!existing?.out1) return "out1";
-    return null; // Both AM slots filled
-  } else {
-    // Afternoon
-    if (!existing?.in2) return "in2";
-    if (!existing?.out2) return "out2";
-    return null; // Both PM slots filled
-  }
+  if (!existing?.in) return "in";
+  if (!existing?.out) return "out";
+  return null;
 };
 
 // ── Clock In/Out ─────────────────────────────────────────────────────────────
@@ -278,9 +264,9 @@ export const clockPerson = async (
 
   // Store time in the correct column
   if (timeIdentifier === 1) {
-    row.in1 = timeStr;
+    row.in = timeStr;
   } else {
-    row.out1 = timeStr;
+    row.out = timeStr;
   }
 
   const { error } = await supabase
