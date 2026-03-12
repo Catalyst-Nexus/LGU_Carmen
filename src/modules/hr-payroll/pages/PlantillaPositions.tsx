@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   PageHeader,
   StatsRow,
@@ -6,21 +6,42 @@ import {
   ActionsBar,
   PrimaryButton,
   DataTable,
+  IconButton,
 } from "@/components/ui";
-import { LayoutList, Plus, RefreshCw } from "lucide-react";
+import {
+  LayoutList,
+  Plus,
+  RefreshCw,
+  Pencil,
+  UserPlus,
+  UserMinus,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react";
 import type { PlantillaPosition } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
-import { createPosition } from "@/services/hrService";
+import {
+  createPosition,
+  updatePosition,
+  deletePosition,
+  unassignEmployeeFromPosition,
+} from "@/services/hrService";
 import type { PlantillaPositionFormData } from "@/services/hrService";
 import PositionDialog from "../components/PositionDialog";
+import type { PositionFormData } from "../components/PositionDialog";
+import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
 
 interface PositionRow {
   id: string;
   item_no: string;
   description: string;
   authorization: string | null;
+  funding_source: string | null;
   is_filled: boolean;
+  is_active: boolean;
   created_at: string;
+  sr_id: string;
+  pt_id: string | null;
   office:
     | { id: string; description: string }[]
     | { id: string; description: string }
@@ -42,7 +63,7 @@ interface PositionRow {
       }
     | null;
   pos_type: { description: string }[] | { description: string } | null;
-  personnel: { first_name: string; last_name: string }[] | null;
+  personnel: { id: string; first_name: string; last_name: string }[] | null;
 }
 
 const fetchPositions = async (): Promise<PlantillaPosition[]> => {
@@ -53,11 +74,12 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
     .from("position")
     .select(
       `
-      id, item_no, description, authorization, is_filled, created_at,
+      id, item_no, description, authorization, funding_source,
+      is_filled, is_active, created_at, sr_id, pt_id,
       office:o_id ( id, description ),
       salary_rate:sr_id ( description, rate:rate_id ( sg_number, step, amount ) ),
       pos_type:pt_id ( description ),
-      personnel ( first_name, last_name )
+      personnel ( id, first_name, last_name )
     `,
     )
     .order("item_no");
@@ -80,6 +102,7 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
     const posType = Array.isArray(row.pos_type)
       ? row.pos_type[0]
       : row.pos_type;
+    const incumbent = row.personnel?.[0] ?? null;
 
     const sgLabel = rate?.sg_number
       ? `SG-${rate.sg_number} Step ${rate.step ?? 1}`
@@ -93,13 +116,18 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
       salary_grade: sgLabel,
       monthly_salary: monthlyAmount,
       authorization: row.authorization ?? "—",
+      funding_source: row.funding_source ?? null,
       office_id: office?.id ?? "",
       office_name: office?.description ?? "Unassigned",
+      sr_id: row.sr_id ?? "",
+      pt_id: row.pt_id ?? "",
       pos_type: posType?.description ?? "—",
       is_filled: row.is_filled,
-      incumbent_name: row.personnel?.[0]
-        ? `${row.personnel[0].last_name}, ${row.personnel[0].first_name}`
+      is_active: row.is_active,
+      incumbent_name: incumbent
+        ? `${incumbent.last_name}, ${incumbent.first_name}`
         : null,
+      incumbent_id: incumbent?.id ?? null,
       created_at: row.created_at,
       slot_info: "", // computed after mapping
     };
@@ -125,12 +153,59 @@ const computeSlotInfo = (
   });
 };
 
+/** Convert PositionFormData (from dialog) to PlantillaPositionFormData (for service) */
+const toServiceData = (
+  formData: PositionFormData,
+): PlantillaPositionFormData => ({
+  item_no: formData.item_no,
+  description: formData.description,
+  sr_id: formData.sr_id,
+  pt_id: formData.pt_id,
+  o_id: formData.o_id,
+  authorization: formData.authorization,
+  ...(formData.funding_source
+    ? { funding_source: formData.funding_source }
+    : {}),
+  ...(formData.slots ? { slots: formData.slots } : {}),
+});
+
 const PlantillaPositions = () => {
   const [positions, setPositions] = useState<PlantillaPosition[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Add dialog
+  const [showAddDialog, setShowAddDialog] = useState(false);
+
+  // Edit dialog
+  const [editingPosition, setEditingPosition] =
+    useState<PlantillaPosition | null>(null);
+
+  // Assign employee dialog
+  const [assignTarget, setAssignTarget] = useState<PlantillaPosition | null>(
+    null,
+  );
+
+  // Confirm unassign / delete
+  const [confirmUnassignId, setConfirmUnassignId] = useState<string | null>(
+    null,
+  );
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Three-dot dropdown
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const loadPositions = useCallback(async () => {
     setIsLoading(true);
@@ -143,9 +218,9 @@ const PlantillaPositions = () => {
     loadPositions();
   }, [loadPositions]);
 
-  const handleAddPosition = async (data: PlantillaPositionFormData) => {
+  const handleAddPosition = async (formData: PositionFormData) => {
     setIsSaving(true);
-    const result = await createPosition(data);
+    const result = await createPosition(toServiceData(formData));
     setIsSaving(false);
     if (result.success) {
       setShowAddDialog(false);
@@ -154,6 +229,51 @@ const PlantillaPositions = () => {
       alert(result.error || "Failed to add position");
     }
   };
+
+  const handleEditPosition = async (formData: PositionFormData) => {
+    if (!editingPosition) return;
+    setIsSaving(true);
+    const result = await updatePosition(
+      editingPosition.id,
+      toServiceData(formData),
+    );
+    setIsSaving(false);
+    if (result.success) {
+      setEditingPosition(null);
+      loadPositions();
+    } else {
+      alert(result.error || "Failed to update position");
+    }
+  };
+
+  const handleUnassign = async (position: PlantillaPosition) => {
+    if (!position.incumbent_id) return;
+    setIsSaving(true);
+    const result = await unassignEmployeeFromPosition(position.incumbent_id);
+    setIsSaving(false);
+    if (result.success) {
+      setConfirmUnassignId(null);
+      loadPositions();
+    } else {
+      alert(result.error || "Failed to unassign employee");
+    }
+  };
+
+  const handleDelete = async (positionId: string) => {
+    setIsSaving(true);
+    const result = await deletePosition(positionId);
+    setIsSaving(false);
+    if (result.success) {
+      setConfirmDeleteId(null);
+      loadPositions();
+    } else {
+      alert(result.error || "Failed to delete position");
+    }
+  };
+
+  const unassignTarget = confirmUnassignId
+    ? (positions.find((p) => p.id === confirmUnassignId) ?? null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -236,6 +356,18 @@ const PlantillaPositions = () => {
             ),
           },
           { key: "authorization", header: "Authorization" },
+          {
+            key: "funding_source",
+            header: "Fund Source",
+            render: (item) =>
+              item.funding_source ? (
+                <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                  {item.funding_source}
+                </span>
+              ) : (
+                <span className="text-muted-foreground text-xs">—</span>
+              ),
+          },
           { key: "office_name", header: "Office" },
           { key: "pos_type", header: "Type" },
           {
@@ -258,6 +390,80 @@ const PlantillaPositions = () => {
             header: "Incumbent",
             render: (item) => <span>{item.incumbent_name ?? "—"}</span>,
           },
+          {
+            key: "id",
+            header: "Actions",
+            render: (item) => (
+              <div
+                className="relative"
+                ref={openMenuId === item.id ? menuRef : null}
+              >
+                <IconButton
+                  onClick={() =>
+                    setOpenMenuId((prev) => (prev === item.id ? null : item.id))
+                  }
+                  title="Actions"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </IconButton>
+
+                {openMenuId === item.id && (
+                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-background border border-border rounded-lg shadow-lg py-1 text-sm">
+                    <button
+                      onClick={() => {
+                        setEditingPosition(item);
+                        setOpenMenuId(null);
+                      }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Edit Position
+                    </button>
+
+                    {!item.is_filled ? (
+                      <button
+                        onClick={() => {
+                          setAssignTarget(item);
+                          setOpenMenuId(null);
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-success/10 text-success transition-colors"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Assign Employee
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfirmUnassignId(item.id);
+                          setOpenMenuId(null);
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-warning/10 text-warning transition-colors"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                        Unassign Incumbent
+                      </button>
+                    )}
+
+                    {!item.is_filled && (
+                      <>
+                        <div className="border-t border-border my-1" />
+                        <button
+                          onClick={() => {
+                            setConfirmDeleteId(item.id);
+                            setOpenMenuId(null);
+                          }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-danger/10 text-danger transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete Position
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ),
+          },
         ]}
         title="Plantilla Positions"
         searchValue={search}
@@ -266,12 +472,100 @@ const PlantillaPositions = () => {
         emptyMessage="No positions found."
       />
 
+      {/* Add Position Dialog */}
       <PositionDialog
         open={showAddDialog}
         onClose={() => setShowAddDialog(false)}
         onSubmit={handleAddPosition}
         isLoading={isSaving}
       />
+
+      {/* Edit Position Dialog */}
+      <PositionDialog
+        open={editingPosition !== null}
+        onClose={() => setEditingPosition(null)}
+        onSubmit={handleEditPosition}
+        position={editingPosition}
+        isLoading={isSaving}
+      />
+
+      {/* Assign Employee Dialog */}
+      <AssignEmployeeDialog
+        open={assignTarget !== null}
+        position={assignTarget}
+        onClose={() => setAssignTarget(null)}
+        onAssigned={loadPositions}
+      />
+
+      {/* Confirm Unassign Modal */}
+      {confirmUnassignId && unassignTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-background border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h3 className="text-base font-semibold text-foreground">
+              Unassign Incumbent?
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              This will remove{" "}
+              <strong className="text-foreground">
+                {unassignTarget.incumbent_name}
+              </strong>{" "}
+              from{" "}
+              <strong className="text-foreground">
+                {unassignTarget.position_title}
+              </strong>{" "}
+              ({unassignTarget.item_number}). The position will become vacant.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmUnassignId(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleUnassign(unassignTarget)}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm rounded-lg bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-60"
+              >
+                {isSaving ? "Unassigning…" : "Unassign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-background border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <h3 className="text-base font-semibold text-foreground">
+              Delete Position?
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              This will permanently delete{" "}
+              <strong className="text-foreground">
+                {positions.find((p) => p.id === confirmDeleteId)?.item_number}
+              </strong>
+              . This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(confirmDeleteId)}
+                disabled={isSaving}
+                className="px-4 py-2 text-sm rounded-lg bg-danger text-white hover:bg-danger/90 transition-colors disabled:opacity-60"
+              >
+                {isSaving ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

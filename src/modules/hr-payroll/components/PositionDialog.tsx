@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { BaseDialog, FormInput } from "@/components/ui/dialog";
 import type { PlantillaPosition } from "@/types/hr.types";
 import type { Office, SalaryRate, PositionType } from "@/services/hrService";
@@ -23,7 +23,8 @@ export interface PositionFormData {
   pt_id: string;
   o_id: string;
   authorization: string;
-  is_filled: boolean;
+  /** DBM fund source: GF, SEF, LDRRMF, SHF, DEVFUND, TRUST */
+  funding_source?: string;
   slots?: number;
 }
 
@@ -46,8 +47,11 @@ const PositionDialog = ({
   const [positionTypeId, setPositionTypeId] = useState("");
   const [officeId, setOfficeId] = useState("");
   const [authorization, setAuthorization] = useState("");
-  const [isFilled, setIsFilled] = useState(false);
+  const [fundingSource, setFundingSource] = useState("");
   const [slots, setSlots] = useState(1);
+
+  // Used to carry the correct step when pre-populating the form for editing
+  const pendingStepRef = useRef("");
 
   const [offices, setOffices] = useState<Office[]>([]);
   const [salaryRates, setSalaryRates] = useState<SalaryRate[]>([]);
@@ -106,26 +110,43 @@ const PositionDialog = ({
     }
   }, [open]);
 
-  // Populate form when editing
+  // Populate form when editing — runs when position OR salaryRates change so
+  // that SG/Step can be resolved from the loaded rate list
   useEffect(() => {
-    if (position) {
+    if (position && salaryRates.length > 0) {
       setItemNo(position.item_number);
       setPositionTitle(position.position_title);
       setOfficeId(position.office_id);
-      setIsFilled(position.is_filled);
-    } else {
+      setAuthorization(
+        position.authorization === "—" ? "" : (position.authorization ?? ""),
+      );
+      setFundingSource(position.funding_source ?? "");
+      setPositionTypeId(position.pt_id ?? "");
+      const matchedRate = salaryRates.find((sr) => sr.id === position.sr_id);
+      if (matchedRate) {
+        pendingStepRef.current = String(matchedRate.step ?? 1);
+        setSelectedSG(String(matchedRate.sg_number ?? ""));
+      }
+    } else if (!position) {
       resetForm();
     }
-  }, [position]);
+  }, [position, salaryRates]);
 
-  // Auto-select Step 1 when SG changes
+  // Auto-select the correct step when SG changes.
+  // When editing, pendingStepRef carries the target step from the position;
+  // otherwise default to Step 1.
   useEffect(() => {
     if (availableSteps.length > 0) {
-      setSelectedStep(String(availableSteps[0].step));
+      if (pendingStepRef.current) {
+        setSelectedStep(pendingStepRef.current);
+        pendingStepRef.current = "";
+      } else {
+        setSelectedStep(String(availableSteps[0].step));
+      }
     } else {
       setSelectedStep("");
     }
-  }, [selectedSG, availableSteps.length]);
+  }, [selectedSG, availableSteps]);
 
   const loadDropdownData = async () => {
     setLoadingData(true);
@@ -146,8 +167,9 @@ const PositionDialog = ({
     setPositionTypeId("");
     setOfficeId("");
     setAuthorization("");
-    setIsFilled(false);
+    setFundingSource("");
     setSlots(1);
+    pendingStepRef.current = "";
   };
 
   const handleSubmit = () => {
@@ -159,7 +181,7 @@ const PositionDialog = ({
       pt_id: positionTypeId,
       o_id: officeId,
       authorization: authorization.trim(),
-      is_filled: isFilled,
+      ...(fundingSource ? { funding_source: fundingSource } : {}),
       ...(!position && slots > 1 ? { slots } : {}),
     };
     onSubmit(positionData);
@@ -342,21 +364,30 @@ const PositionDialog = ({
           onChange={setAuthorization}
         />
 
-        {/* Status (Filled/Vacant) */}
-        <div className="flex items-center gap-2">
-          <input
-            id="is-filled"
-            type="checkbox"
-            className="w-4 h-4 border border-border rounded text-success focus:ring-success"
-            checked={isFilled}
-            onChange={(e) => setIsFilled(e.target.checked)}
-          />
+        {/* Funding Source (DBM requirement) */}
+        <div className="space-y-1.5">
           <label
-            htmlFor="is-filled"
-            className="text-sm font-medium text-foreground"
+            htmlFor="funding-source"
+            className="block text-sm font-medium text-foreground"
           >
-            Position is Filled
+            Funding Source
           </label>
+          <select
+            id="funding-source"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            value={fundingSource}
+            onChange={(e) => setFundingSource(e.target.value)}
+          >
+            <option value="">-- Select fund source --</option>
+            <option value="GF">GF — General Fund</option>
+            <option value="SEF">SEF — Special Education Fund</option>
+            <option value="LDRRMF">
+              LDRRMF — Local Disaster Risk Reduction Fund
+            </option>
+            <option value="SHF">SHF — Special Health Fund</option>
+            <option value="DEVFUND">DEVFUND — Development Fund</option>
+            <option value="TRUST">TRUST — Trust Fund</option>
+          </select>
         </div>
 
         {!isFormValid() && (

@@ -345,10 +345,10 @@ const Sidebar = () => {
   const dynamicSections: MenuSection[] = useMemo(() => {
     if (userModules.length === 0) return [];
 
-    // Group modules by category
+    // Group modules by category (normalize to UPPER so mixed-case values don't create duplicate sections)
     const grouped = userModules.reduce(
       (acc, module) => {
-        const category = module.category || "MODULES";
+        const category = (module.category || "MODULES").toUpperCase();
         if (!acc[category]) {
           acc[category] = [];
         }

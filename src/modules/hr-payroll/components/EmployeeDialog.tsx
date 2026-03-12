@@ -68,9 +68,12 @@ const EmployeeDialog = ({
   const [lastName, setLastName] = useState("");
   const [suffix, setSuffix] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [sex, setSex] = useState<"male" | "female" | "">("");
   const [civilStatus, setCivilStatus] = useState("");
+  const [nationality, setNationality] = useState("Filipino");
   const [bloodType, setBloodType] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
 
   // ── Government IDs ──
@@ -86,6 +89,19 @@ const EmployeeDialog = ({
     useState<EmployeeFormData["employment_status"]>("permanent");
   const [dateHired, setDateHired] = useState("");
   const [isActive, setIsActive] = useState(true);
+
+  // ── Appointment (CSC Form 33) ──
+  const [appointmentType, setAppointmentType] = useState<
+    | "original"
+    | "reappointment"
+    | "promotion"
+    | "transfer"
+    | "reinstatement"
+    | "demotion"
+    | ""
+  >("");
+  const [dateAssumed, setDateAssumed] = useState("");
+  const [civilServiceEligibility, setCivilServiceEligibility] = useState("");
 
   // ── Dropdown data ──
   const [offices, setOffices] = useState<Office[]>([]);
@@ -104,9 +120,12 @@ const EmployeeDialog = ({
       setLastName(employee.last_name);
       setSuffix(raw.suffix ?? "");
       setBirthDate(raw.birth_date ?? "");
+      setSex((raw.sex as "male" | "female" | "") ?? "");
       setCivilStatus(raw.civil_status ?? "");
+      setNationality(raw.nationality || "Filipino");
       setBloodType(raw.blood_type ?? "");
       setContactNumber(raw.contact_number ?? "");
+      setEmail(raw.email ?? "");
       setAddress(raw.address ?? "");
       setGsisNumber(raw.gsis_number ?? "");
       setPhilhealthNumber(raw.philhealth_number ?? "");
@@ -117,6 +136,11 @@ const EmployeeDialog = ({
       setEmploymentStatus(employee.employment_status);
       setDateHired(employee.date_hired);
       setIsActive(employee.is_active);
+      setAppointmentType(
+        (raw.appointment_type as typeof appointmentType) ?? "",
+      );
+      setDateAssumed(raw.date_assumed ?? "");
+      setCivilServiceEligibility(raw.civil_service_eligibility ?? "");
     } else {
       resetForm();
     }
@@ -139,9 +163,12 @@ const EmployeeDialog = ({
     setLastName("");
     setSuffix("");
     setBirthDate("");
+    setSex("");
     setCivilStatus("");
+    setNationality("Filipino");
     setBloodType("");
     setContactNumber("");
+    setEmail("");
     setAddress("");
     setGsisNumber("");
     setPhilhealthNumber("");
@@ -152,6 +179,9 @@ const EmployeeDialog = ({
     setEmploymentStatus("permanent");
     setDateHired("");
     setIsActive(true);
+    setAppointmentType("");
+    setDateAssumed("");
+    setCivilServiceEligibility("");
   };
 
   const handleSubmit = () => {
@@ -166,14 +196,20 @@ const EmployeeDialog = ({
       date_hired: dateHired,
       is_active: isActive,
       birth_date: birthDate,
+      sex: sex || undefined,
       civil_status: civilStatus as EmployeeFormData["civil_status"],
+      nationality: nationality.trim() || "Filipino",
       blood_type: bloodType,
       contact_number: contactNumber.trim(),
+      email: email.trim() || undefined,
       address: address.trim(),
       gsis_number: gsisNumber.trim(),
       philhealth_number: philhealthNumber.trim(),
       pagibig_number: pagibigNumber.trim(),
       tin: tin.trim(),
+      appointment_type: appointmentType || undefined,
+      date_assumed: dateAssumed || undefined,
+      civil_service_eligibility: civilServiceEligibility.trim() || undefined,
     });
   };
 
@@ -266,6 +302,17 @@ const EmployeeDialog = ({
           </div>
 
           <FormSelect
+            id="sex"
+            label="Sex"
+            value={sex}
+            onChange={(v) => setSex(v as typeof sex)}
+          >
+            <option value="">-- Select --</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </FormSelect>
+
+          <FormSelect
             id="civil-status"
             label="Civil Status"
             value={civilStatus}
@@ -277,6 +324,14 @@ const EmployeeDialog = ({
             <option value="widowed">Widowed</option>
             <option value="separated">Separated</option>
           </FormSelect>
+
+          <FormInput
+            id="nationality"
+            label="Nationality"
+            placeholder="Filipino"
+            value={nationality}
+            onChange={setNationality}
+          />
 
           <FormSelect
             id="blood-type"
@@ -300,6 +355,13 @@ const EmployeeDialog = ({
             placeholder="09XX-XXX-XXXX"
             value={contactNumber}
             onChange={setContactNumber}
+          />
+          <FormInput
+            id="email"
+            label="Email Address"
+            placeholder="juan.delacruz@lgu.gov.ph"
+            value={email}
+            onChange={setEmail}
           />
           <FormInput
             id="address"
@@ -379,7 +441,7 @@ const EmployeeDialog = ({
 
           <FormSelect
             id="employment-status"
-            label="Employment Type"
+            label="Employment Type (Nature of Appointment)"
             value={employmentStatus}
             onChange={(v) =>
               setEmploymentStatus(v as EmployeeFormData["employment_status"])
@@ -399,7 +461,7 @@ const EmployeeDialog = ({
               htmlFor="date-hired"
               className="block text-sm font-medium text-foreground"
             >
-              Date Hired
+              Date of Original Appointment
               <span className="text-error ml-1">*</span>
             </label>
             <input
@@ -409,6 +471,48 @@ const EmployeeDialog = ({
               value={dateHired}
               onChange={(e) => setDateHired(e.target.value)}
               required
+            />
+          </div>
+
+          <FormSelect
+            id="appointment-type"
+            label="Appointment Type (CSC Form 33)"
+            value={appointmentType}
+            onChange={(v) => setAppointmentType(v as typeof appointmentType)}
+          >
+            <option value="">-- Select --</option>
+            <option value="original">Original</option>
+            <option value="reappointment">Reappointment</option>
+            <option value="promotion">Promotion</option>
+            <option value="transfer">Transfer</option>
+            <option value="reinstatement">Reinstatement</option>
+            <option value="demotion">Demotion</option>
+          </FormSelect>
+
+          {/* Date Assumed */}
+          <div className="space-y-1.5">
+            <label
+              htmlFor="date-assumed"
+              className="block text-sm font-medium text-foreground"
+            >
+              Date Assumed
+            </label>
+            <input
+              id="date-assumed"
+              type="date"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              value={dateAssumed}
+              onChange={(e) => setDateAssumed(e.target.value)}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <FormInput
+              id="civil-service-eligibility"
+              label="Civil Service Eligibility"
+              placeholder="e.g. Career Service Professional, First Grade"
+              value={civilServiceEligibility}
+              onChange={setCivilServiceEligibility}
             />
           </div>
         </div>

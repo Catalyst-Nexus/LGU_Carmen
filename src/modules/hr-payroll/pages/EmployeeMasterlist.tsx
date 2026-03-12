@@ -18,14 +18,23 @@ import {
   Pencil,
   Eye,
   MoreHorizontal,
+  UserX,
+  UserCheck2,
 } from "lucide-react";
 import type { Employee } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
-import { createEmployee, updateEmployee } from "@/services/hrService";
+import {
+  createEmployee,
+  updateEmployee,
+  deactivateEmployee,
+  reinstateEmployee,
+} from "@/services/hrService";
 import type { EmployeeFormData } from "@/services/hrService";
 import LinkAccountDialog from "../components/LinkAccountDialog";
 import EmployeeDialog from "../components/EmployeeDialog";
 import EmployeeProfile from "../components/EmployeeProfile";
+import DeactivateEmployeeDialog from "../components/DeactivateEmployeeDialog";
+import type { DeactivatePayload } from "../components/DeactivateEmployeeDialog";
 
 // Raw row shape returned by the Supabase hr.personnel query
 interface PersonnelRow {
@@ -36,9 +45,12 @@ interface PersonnelRow {
   last_name: string;
   suffix: string;
   birth_date: string | null;
+  sex: string | null;
   civil_status: string | null;
+  nationality: string;
   blood_type: string | null;
   contact_number: string | null;
+  email: string | null;
   address: string;
   gsis_number: string | null;
   philhealth_number: string | null;
@@ -46,6 +58,9 @@ interface PersonnelRow {
   tin: string | null;
   employment_status: Employee["employment_status"];
   date_hired: string;
+  appointment_type: string | null;
+  date_assumed: string | null;
+  civil_service_eligibility: string | null;
   separation_date: string | null;
   separation_type: string | null;
   is_active: boolean;
@@ -75,10 +90,10 @@ const fetchPersonnel = async (): Promise<Employee[]> => {
     .select(
       `
       id, employee_no, first_name, middle_name, last_name, suffix,
-      birth_date, civil_status, blood_type, contact_number, address,
+      birth_date, sex, civil_status, nationality, blood_type, contact_number, email, address,
       gsis_number, philhealth_number, pagibig_number, tin,
-      employment_status, date_hired, separation_date, separation_type,
-      is_active, created_at, user_id,
+      employment_status, date_hired, appointment_type, date_assumed, civil_service_eligibility,
+      separation_date, separation_type, is_active, created_at, user_id,
       position:pos_id (
         id, description, item_no, salary_grade,
         salary_rate:sr_id ( rate:rate_id ( step ) )
@@ -143,6 +158,9 @@ const EmployeeMasterlist = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [deactivateTarget, setDeactivateTarget] = useState<Employee | null>(
+    null,
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -207,10 +225,9 @@ const EmployeeMasterlist = () => {
 
   const filtered = useMemo(() => {
     return employees.filter((e) => {
-      const raw = e as unknown as Record<string, unknown>;
       const label = e.is_active
         ? "Active"
-        : (raw.separation_date as string)
+        : e.separation_date
           ? "Separated"
           : "Inactive";
 
@@ -271,11 +288,33 @@ const EmployeeMasterlist = () => {
     }
   };
 
+  const handleDeactivate = async (payload: DeactivatePayload) => {
+    if (!deactivateTarget) return;
+    const result = await deactivateEmployee(deactivateTarget.id, payload);
+    if (!result.success)
+      throw new Error(result.error || "Failed to deactivate employee");
+    loadEmployees();
+  };
+
+  const handleReinstate = async (employee: Employee) => {
+    if (
+      !window.confirm(
+        `Reinstate ${employee.last_name}, ${employee.first_name}?\nThis will clear the separation record and mark them as active.`,
+      )
+    )
+      return;
+    const result = await reinstateEmployee(employee.id);
+    if (!result.success) {
+      alert(result.error || "Failed to reinstate employee");
+      return;
+    }
+    loadEmployees();
+  };
+
   // Derive employee status label
   const getStatusLabel = (e: Employee): "Active" | "Separated" | "Inactive" => {
     if (!e.is_active) {
-      const sep = (e as unknown as Record<string, unknown>).separation_date;
-      return sep ? "Separated" : "Inactive";
+      return e.separation_date ? "Separated" : "Inactive";
     }
     return "Active";
   };
@@ -540,6 +579,30 @@ const EmployeeMasterlist = () => {
                       )}
                       {item.user_id ? "Manage Account Link" : "Link Account"}
                     </button>
+                    <div className="border-t border-border my-1" />
+                    {item.is_active ? (
+                      <button
+                        onClick={() => {
+                          setDeactivateTarget(item);
+                          setOpenMenuId(null);
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-danger/10 text-danger transition-colors"
+                      >
+                        <UserX className="w-4 h-4" />
+                        Deactivate / Separate
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          handleReinstate(item);
+                        }}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-success/10 text-success transition-colors"
+                      >
+                        <UserCheck2 className="w-4 h-4" />
+                        Reinstate Employee
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -579,6 +642,13 @@ const EmployeeMasterlist = () => {
       <EmployeeProfile
         employee={selectedEmployee}
         onClose={() => setSelectedEmployee(null)}
+      />
+
+      <DeactivateEmployeeDialog
+        open={deactivateTarget !== null}
+        employee={deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={handleDeactivate}
       />
     </div>
   );

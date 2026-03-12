@@ -31,3 +31,6 @@ dist-ssr
 .serena
 .github
 openspec
+
+# SQL migration files (run manually against Supabase)
+**/migrations/

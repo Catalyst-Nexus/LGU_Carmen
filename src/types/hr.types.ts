@@ -28,6 +28,10 @@ export interface Employee {
   created_at: string;
   /** auth.users.id — null when no system account has been linked */
   user_id: string | null;
+  /** Date the employee was separated (null while still active) */
+  separation_date: string | null;
+  /** Reason for separation; null while still active */
+  separation_type: string | null;
 }
 
 export interface PlantillaPosition {
@@ -40,11 +44,19 @@ export interface PlantillaPosition {
   monthly_salary: number;
   /** Legal basis — e.g. "SB Ord. No. 2024-015" or "RA 11466" */
   authorization: string;
+  /** DBM fund source: GF, SEF, LDRRMF, SHF, DEVFUND, TRUST */
+  funding_source: string | null;
   office_id: string;
   office_name: string;
+  /** Raw FK to hr.salary_rate — used for edit form pre-population */
+  sr_id: string;
+  /** Raw FK to hr.pos_type — used for edit form pre-population */
+  pt_id: string;
   pos_type: string;
   is_filled: boolean;
+  is_active: boolean;
   incumbent_name: string | null;
+  incumbent_id: string | null;
   created_at: string;
   /** Slot info like "2/3" (filled/total) for same position title + office */
   slot_info: string;
