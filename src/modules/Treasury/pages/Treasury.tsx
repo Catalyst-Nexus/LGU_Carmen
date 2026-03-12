@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import { Coins, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Routes, Route, useNavigate } from 'react-router';
+import { Coins, TrendingUp, TrendingDown, Wallet, ArrowUpRight, ArrowDownRight, BarChart3, Landmark, ArrowLeft } from 'lucide-react';
+import CashflowMonitoring from './CashflowMonitoring';
+import CollectionMonitoring from './CollectionMonitoring';
+import DisbursementTracking from './DisbursementTracking';
+import BankReconciliation from './BankReconciliation';
 
-const Treasury = () => {
+const TreasuryHome = () => {
+  const navigate = useNavigate();
+
   // TODO: Replace with actual API calls
   const [stats] = useState([
     {
@@ -64,7 +71,7 @@ const Treasury = () => {
           const colors = colorMap[stat.color];
           const Icon = stat.icon;
           const TrendIcon = stat.trend === 'up' ? TrendingUp : TrendingDown;
-          
+
           return (
             <div
               key={idx}
@@ -84,6 +91,53 @@ const Treasury = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* Module Navigation */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          onClick={() => navigate('cashflow')}
+          className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
+        >
+          <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
+            <BarChart3 className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Cashflow Monitoring</h3>
+          <p className="text-xs text-muted">Track cash inflows and outflows</p>
+        </button>
+
+        <button
+          onClick={() => navigate('collections')}
+          className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
+        >
+          <div className="p-3 bg-gradient-to-br from-green-500 to-green-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
+            <TrendingUp className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Collection Monitoring</h3>
+          <p className="text-xs text-muted">Monitor revenue collections</p>
+        </button>
+
+        <button
+          onClick={() => navigate('disbursements')}
+          className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
+        >
+          <div className="p-3 bg-gradient-to-br from-orange-500 to-orange-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
+            <TrendingDown className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Disbursement Tracking</h3>
+          <p className="text-xs text-muted">Monitor all fund disbursements</p>
+        </button>
+
+        <button
+          onClick={() => navigate('reconciliation')}
+          className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
+        >
+          <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
+            <Landmark className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">Bank Reconciliation</h3>
+          <p className="text-xs text-muted">Reconcile bank accounts</p>
+        </button>
       </div>
 
       {/* Placeholder Cards */}
@@ -127,6 +181,76 @@ const Treasury = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Treasury = () => {
+  const navigate = useNavigate();
+
+  return (
+    <Routes>
+      <Route index element={<TreasuryHome />} />
+      <Route
+        path="cashflow"
+        element={
+          <div>
+            <button
+              onClick={() => navigate('..')}
+              className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Treasury
+            </button>
+            <CashflowMonitoring />
+          </div>
+        }
+      />
+      <Route
+        path="collections"
+        element={
+          <div>
+            <button
+              onClick={() => navigate('..')}
+              className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Treasury
+            </button>
+            <CollectionMonitoring />
+          </div>
+        }
+      />
+      <Route
+        path="disbursements"
+        element={
+          <div>
+            <button
+              onClick={() => navigate('..')}
+              className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Treasury
+            </button>
+            <DisbursementTracking />
+          </div>
+        }
+      />
+      <Route
+        path="reconciliation"
+        element={
+          <div>
+            <button
+              onClick={() => navigate('..')}
+              className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Treasury
+            </button>
+            <BankReconciliation />
+          </div>
+        }
+      />
+    </Routes>
   );
 };
 
