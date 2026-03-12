@@ -110,7 +110,6 @@ export interface AttendanceRecord {
   total_hours: number;
   /** Trigger-computed pay */
   pay_amount: number;
-  status: "present" | "absent" | "late" | "halfday" | "holiday";
   created_at: string;
 }
 
