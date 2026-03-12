@@ -2,6 +2,12 @@ import { Plus, X } from 'lucide-react';
 import { BaseDialog, FormInput } from '@/components/ui/dialog';
 import type { AccountType } from '@/types/accounting.types';
 
+export interface ExistingSubItem {
+  id: string;
+  description: string;
+  editable: boolean;
+}
+
 interface AccountingPlanDialogProps {
   open: boolean;
   onClose: () => void;
@@ -14,6 +20,8 @@ interface AccountingPlanDialogProps {
   onHasSubChange: (value: boolean) => void;
   subDescriptions: string[];
   onSubDescriptionsChange: (descriptions: string[]) => void;
+  existingSubs?: ExistingSubItem[];
+  onExistingSubsChange?: (subs: ExistingSubItem[]) => void;
   isLoading?: boolean;
   editMode?: boolean;
   error?: string;
@@ -31,6 +39,8 @@ const AccountingPlanDialog = ({
   onHasSubChange,
   subDescriptions,
   onSubDescriptionsChange,
+  existingSubs = [],
+  onExistingSubsChange,
   isLoading = false,
   editMode = false,
   error,
@@ -123,12 +133,43 @@ const AccountingPlanDialog = ({
                 Add another
               </button>
             </div>
+
+            {/* Existing subs (edit mode only) */}
+            {editMode && existingSubs.length > 0 && (
+              <>
+                {existingSubs.map((sub, i) => (
+                  <div key={sub.id} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success disabled:opacity-60 disabled:cursor-not-allowed"
+                      placeholder={`Sub-record ${i + 1} description`}
+                      value={sub.description}
+                      disabled={!sub.editable}
+                      onChange={(e) => {
+                        if (!onExistingSubsChange) return;
+                        const next = existingSubs.map((s, idx) =>
+                          idx === i ? { ...s, description: e.target.value } : s
+                        );
+                        onExistingSubsChange(next);
+                      }}
+                    />
+                  </div>
+                ))}
+                {subDescriptions.length > 0 && subDescriptions.some((d) => d !== '') && (
+                  <div className="border-t border-border/50 pt-2 mt-1">
+                    <span className="text-xs text-muted">New sub-records</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* New sub-record inputs */}
             {subDescriptions.map((desc, i) => (
               <div key={i} className="flex items-center gap-2">
                 <input
                   type="text"
                   className="flex-1 px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success"
-                  placeholder={`Sub-record ${i + 1} description`}
+                  placeholder={`Sub-record ${(editMode ? existingSubs.length : 0) + i + 1} description`}
                   value={desc}
                   onChange={(e) => updateSub(i, e.target.value)}
                 />

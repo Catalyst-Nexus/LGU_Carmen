@@ -3,6 +3,7 @@ import { BookOpen, Plus } from 'lucide-react';
 import { PageHeader, ActionsBar, PrimaryButton } from '@/components/ui';
 import AccountingPlanList from '@/modules/Accounting/components/AccountingPlanList';
 import AccountingPlanDialog from '@/modules/Accounting/components/AccountingPlanDialog';
+import type { ExistingSubItem } from '@/modules/Accounting/components/AccountingPlanDialog';
 import AccountingPlanRequestTab from '@/modules/Accounting/components/AccountingPlanRequestTab';
 import {
   fetchPlans,
@@ -34,6 +35,7 @@ const GeneralAccountingPlan = () => {
   const [planDescription, setPlanDescription] = useState('');
   const [planHasSub, setPlanHasSub] = useState(false);
   const [planSubDescriptions, setPlanSubDescriptions] = useState<string[]>(['']);
+  const [editingPlanSubs, setEditingPlanSubs] = useState<ExistingSubItem[]>([]);
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState('');
 
@@ -64,6 +66,7 @@ const GeneralAccountingPlan = () => {
     setPlanDescription('');
     setPlanHasSub(false);
     setPlanSubDescriptions(['']);
+    setEditingPlanSubs([]);
     setPlanError('');
     setPlanDialogOpen(true);
   };
@@ -75,6 +78,11 @@ const GeneralAccountingPlan = () => {
     setPlanDescription(plan.description);
     setPlanHasSub(plan.has_sub);
     setPlanSubDescriptions(['']);
+    setEditingPlanSubs(
+      subs
+        .filter((s) => s.general_accounting_plan_id === plan.id)
+        .map((s) => ({ id: s.id, description: s.description, editable: s.editable }))
+    );
     setPlanError('');
     setPlanDialogOpen(true);
   };
@@ -97,6 +105,19 @@ const GeneralAccountingPlan = () => {
       const updated = await updatePlan(editingPlan.id, payload);
       if (updated) {
         setPlans((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        // Update existing subs
+        for (const sub of editingPlanSubs) {
+          if (sub.editable) {
+            const updatedSub = await updatePlanSub(sub.id, {
+              description: sub.description,
+              general_accounting_plan_id: updated.id,
+              status: true,
+              editable: true,
+            });
+            if (updatedSub) setSubs((prev) => prev.map((s) => (s.id === updatedSub.id ? updatedSub : s)));
+          }
+        }
+        // Create new subs
         for (const desc of nonEmptySubs) {
           const sub = await createPlanSub({ description: desc.trim(), general_accounting_plan_id: updated.id, status: true, editable: true });
           if (sub) setSubs((prev) => [...prev, sub]);
@@ -263,6 +284,8 @@ const GeneralAccountingPlan = () => {
         onHasSubChange={(val) => { setPlanHasSub(val); if (!val) setPlanSubDescriptions(['']); }}
         subDescriptions={planSubDescriptions}
         onSubDescriptionsChange={setPlanSubDescriptions}
+        existingSubs={editingPlanSubs}
+        onExistingSubsChange={setEditingPlanSubs}
         isLoading={planLoading}
         editMode={!!editingPlan}
         error={planError}

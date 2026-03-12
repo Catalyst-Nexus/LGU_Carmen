@@ -377,35 +377,39 @@ export function DataTable<T extends { id: string }>({
         {totalPages > 1 && (
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={safePage === 1}
+              aria-label="Previous page"
               className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             {Array.from({ length: totalPages }).map((_, i) => {
-              const page = i + 1;
-              // Show first, last, and pages near current
-              if (
-                page === 1 ||
-                page === totalPages ||
-                Math.abs(page - safePage) <= 1
-              ) {
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={cn(
-                      "min-w-[32px] h-8 rounded text-sm font-medium transition-colors",
-                      page === safePage
-                        ? "bg-success text-white"
-                        : "hover:bg-background",
-                    )}
-                  >
-                    {page}
-                  </button>
-                );
-              }
+            const page = i + 1;
+            // Show first, last, and pages near current
+            if (
+              page === 1 ||
+              page === totalPages ||
+              Math.abs(page - safePage) <= 1
+            ) {
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-label={`Go to page ${page}`}
+                  className={cn(
+                    "min-w-[32px] h-8 rounded text-sm font-medium transition-colors",
+                    page === safePage
+                      ? "bg-success text-white"
+                      : "hover:bg-background",
+                  )}
+                >
+                  {page}
+                </button>
+              );
+            }
               // Ellipsis — only render once per gap
               if (page === 2 && safePage > 3) {
                 return (
@@ -424,8 +428,10 @@ export function DataTable<T extends { id: string }>({
               return null;
             })}
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
+              aria-label="Next page"
               className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
