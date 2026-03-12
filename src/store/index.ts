@@ -15,6 +15,7 @@ interface SettingsState {
   reducedMotion: boolean
   sidebarCollapsed: boolean
   systemLogo: string | null
+  systemLogoPath: string | null
   sidebarOrder: Record<string, string[]> // category -> ordered item ids
   sidebarSectionOrder: string[] // ordered section titles
   setDarkMode: (value: boolean) => void
@@ -25,7 +26,7 @@ interface SettingsState {
   setHighContrast: (value: boolean) => void
   setReducedMotion: (value: boolean) => void
   setSidebarCollapsed: (value: boolean) => void
-  setSystemLogo: (url: string | null) => void
+  setSystemLogo: (url: string | null, path?: string | null) => void
   setSidebarOrder: (order: Record<string, string[]>) => void
   setSidebarSectionOrder: (order: string[]) => void
   resetSidebarOrder: () => void
@@ -43,6 +44,7 @@ export const useSettingsStore = create<SettingsState>()(
       reducedMotion: false,
       sidebarCollapsed: false,
       systemLogo: null,
+      systemLogoPath: null,
       sidebarOrder: {},
       sidebarSectionOrder: [],
       setDarkMode: (value) => set({ darkMode: value }),
@@ -53,7 +55,7 @@ export const useSettingsStore = create<SettingsState>()(
       setHighContrast: (value) => set({ highContrast: value }),
       setReducedMotion: (value) => set({ reducedMotion: value }),
       setSidebarCollapsed: (value) => set({ sidebarCollapsed: value }),
-      setSystemLogo: (url) => set({ systemLogo: url }),
+      setSystemLogo: (url, path) => set({ systemLogo: url, systemLogoPath: path ?? null }),
       setSidebarOrder: (order) => set({ sidebarOrder: order }),
       setSidebarSectionOrder: (order) => set({ sidebarSectionOrder: order }),
       resetSidebarOrder: () => set({ sidebarOrder: {}, sidebarSectionOrder: [] }),
