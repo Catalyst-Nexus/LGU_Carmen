@@ -15,6 +15,7 @@ interface ModuleDialogProps {
   onFilePathChange: (value: string) => void;
   category: string;
   onCategoryChange: (value: string) => void;
+  existingCategories?: string[];
   isActive: boolean;
   onIsActiveChange: (value: boolean) => void;
   availableIcons: string[];
@@ -36,6 +37,7 @@ const ModuleDialog = ({
   onFilePathChange,
   category,
   onCategoryChange,
+  existingCategories = [],
   isActive,
   onIsActiveChange,
   availableIcons = [],
@@ -86,17 +88,41 @@ const ModuleDialog = ({
         </ul>
         <p className="italic">Register new components in Dashboard.tsx</p>
       </div>
-      <FormInput
-        id="category"
-        label="Category"
-        placeholder="e.g., RBAC Management, Inventory, Reports"
-        value={category}
-        onChange={onCategoryChange}
-        required
-      />
-      <div className="text-xs text-muted -mt-1">
-        Category name for grouping modules in the sidebar (e.g., "RBAC
-        Management", "Inventory")
+      <div className="flex flex-col gap-2">
+        <label htmlFor="category" className="text-sm font-medium text-foreground">
+          Category <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="category"
+          value={existingCategories.includes(category) ? category : "__custom__"}
+          onChange={(e) => {
+            if (e.target.value !== "__custom__") {
+              onCategoryChange(e.target.value);
+            }
+          }}
+          className="w-full px-4 py-3 border border-border rounded-lg text-sm bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+        >
+          <option value="">Select a category</option>
+          {existingCategories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
+          ))}
+          <option value="__custom__">+ New category...</option>
+        </select>
+        {(!existingCategories.includes(category) || category === "") && (
+          <input
+            id="category-custom"
+            type="text"
+            placeholder="e.g., RBAC Management, Inventory, Reports"
+            value={category}
+            onChange={(e) => onCategoryChange(e.target.value)}
+            className="w-full px-4 py-3 border border-border rounded-lg text-sm bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+          />
+        )}
+        <div className="text-xs text-muted">
+          Category name for grouping modules in the sidebar (e.g., "RBAC Management", "Inventory")
+        </div>
       </div>
       <div className="flex flex-col gap-2">
         <label htmlFor="icon" className="text-sm font-medium text-foreground">

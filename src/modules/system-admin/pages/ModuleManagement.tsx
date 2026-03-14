@@ -196,6 +196,9 @@ const ModuleManagement = () => {
   const total = modules.length;
   const active = modules.filter((m) => m.is_active).length;
   const inactive = modules.filter((m) => !m.is_active).length;
+  const existingCategories = Array.from(
+    new Set(modules.map((m) => m.category).filter((c): c is string => !!c))
+  );
 
   return (
     <div className="space-y-6">
@@ -273,6 +276,7 @@ const ModuleManagement = () => {
         availableIcons={availableIcons}
         isLoading={isLoading}
         editMode={!!editingModuleId}
+        existingCategories={existingCategories}
       />
     </div>
   );
