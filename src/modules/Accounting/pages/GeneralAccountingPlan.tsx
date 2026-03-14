@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Plus } from 'lucide-react';
-import { PageHeader, ActionsBar, PrimaryButton } from '@/components/ui';
+import { BookOpen, Plus, ListChecks, Layers3, CheckCircle2 } from 'lucide-react';
+import { PageHeader, ActionsBar, PrimaryButton, StatsRow, StatCard } from '@/components/ui';
 import AccountingPlanList from '@/modules/Accounting/components/AccountingPlanList';
 import AccountingPlanDialog from '@/modules/Accounting/components/AccountingPlanDialog';
 import type { ExistingSubItem } from '@/modules/Accounting/components/AccountingPlanDialog';
@@ -51,6 +51,11 @@ const GeneralAccountingPlan = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSubTarget, setDeleteSubTarget] = useState<GeneralAccountingPlanSub | null>(null);
   const [deleteSubConfirmOpen, setDeleteSubConfirmOpen] = useState(false);
+
+  const totalPlans = plans.length;
+  const activePlans = plans.filter((plan) => plan.status).length;
+  const plansWithSubRecords = plans.filter((plan) => plan.has_sub).length;
+  const totalSubRecords = subs.length;
 
   // ── Data loading ──────────────────────────────────────────────────────────
   const loadPlans = useCallback(async () => { setPlans(await fetchPlans()); }, []);
@@ -215,32 +220,70 @@ const GeneralAccountingPlan = () => {
         icon={<BookOpen className="w-6 h-6" />}
       />
 
+      <StatsRow>
+        <StatCard
+          label="Plan Records"
+          value={totalPlans}
+          icon={<ListChecks className="w-4 h-4" />}
+        />
+        <StatCard
+          label="With Sub-Records"
+          value={plansWithSubRecords}
+          color="success"
+          icon={<Layers3 className="w-4 h-4" />}
+        />
+        <StatCard
+          label="Active Plans"
+          value={activePlans}
+          color="primary"
+          icon={<CheckCircle2 className="w-4 h-4" />}
+        />
+        <StatCard
+          label="Total Sub-Records"
+          value={totalSubRecords}
+          color="warning"
+          icon={<Layers3 className="w-4 h-4" />}
+        />
+      </StatsRow>
+
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-border">
-        <button
-          onClick={() => setActiveTab('plans')}
-          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'plans'
-              ? 'border-success text-success'
-              : 'border-transparent text-muted hover:text-foreground'
-          }`}
-        >
-          Accounting Plans
-        </button>
-        <button
-          onClick={() => setActiveTab('request')}
-          className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-            activeTab === 'request'
-              ? 'border-success text-success'
-              : 'border-transparent text-muted hover:text-foreground'
-          }`}
-        >
-          Send Request
-        </button>
+      <div className="rounded-2xl border border-border bg-surface p-1">
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            onClick={() => setActiveTab('plans')}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors rounded-xl ${
+              activeTab === 'plans'
+                ? 'bg-success text-white shadow-sm'
+                : 'text-muted hover:text-foreground hover:bg-background'
+            }`}
+          >
+            Accounting Plans
+          </button>
+          <button
+            onClick={() => setActiveTab('request')}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors rounded-xl ${
+              activeTab === 'request'
+                ? 'bg-success text-white shadow-sm'
+                : 'text-muted hover:text-foreground hover:bg-background'
+            }`}
+          >
+            Send Request
+          </button>
+        </div>
       </div>
 
       {activeTab === 'plans' && (
-        <>
+        <div className="rounded-2xl border border-border bg-surface p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Accounting Plan Records</h2>
+              <p className="text-xs text-muted">All plans, status, and linked sub-records in one view.</p>
+            </div>
+            <span className="text-xs text-muted px-2.5 py-1 rounded-full bg-background border border-border">
+              {totalPlans} {totalPlans === 1 ? 'record' : 'records'}
+            </span>
+          </div>
+
           <ActionsBar>
             <PrimaryButton onClick={openAddPlan}>
               <Plus className="w-4 h-4" />
@@ -259,16 +302,28 @@ const GeneralAccountingPlan = () => {
             onDeleteSub={requestDeleteSub}
             subSaving={subSaving}
           />
-        </>
+        </div>
       )}
 
       {activeTab === 'request' && (
-        <AccountingPlanRequestTab
-          plans={plans}
-          subs={subs}
-          onSubmit={handleRequest}
-          isLoading={requestLoading}
-        />
+        <div className="rounded-2xl border border-border bg-surface p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Submit Plan Request</h2>
+              <p className="text-xs text-muted">Send updates for plans and sub-records to be reviewed.</p>
+            </div>
+            <span className="text-xs text-muted px-2.5 py-1 rounded-full bg-background border border-border">
+              {totalSubRecords} total sub-records
+            </span>
+          </div>
+
+          <AccountingPlanRequestTab
+            plans={plans}
+            subs={subs}
+            onSubmit={handleRequest}
+            isLoading={requestLoading}
+          />
+        </div>
       )}
 
       {/* Plan dialog */}
