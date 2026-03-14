@@ -13,45 +13,62 @@ const TreasuryHome = () => {
   // TODO: Replace with actual API calls
   const [stats] = useState([
     {
-      title: 'Treasury Accounts',
-      value: '0',
-      change: '+0%',
-      trend: 'up',
+      title: "Treasury Accounts",
+      value: "0",
+      change: "+0%",
+      trend: "up",
       icon: Wallet,
-      color: 'blue',
+      color: "blue",
     },
     {
-      title: 'Total Receipts',
-      value: '₱0.00',
-      change: '+0%',
-      trend: 'up',
+      title: "Total Receipts",
+      value: "₱0.00",
+      change: "+0%",
+      trend: "up",
       icon: ArrowDownRight,
-      color: 'green',
+      color: "green",
     },
     {
-      title: 'Total Disbursements',
-      value: '₱0.00',
-      change: '+0%',
-      trend: 'down',
+      title: "Total Disbursements",
+      value: "₱0.00",
+      change: "+0%",
+      trend: "down",
       icon: ArrowUpRight,
-      color: 'orange',
+      color: "orange",
     },
     {
-      title: 'Current Balance',
-      value: '₱0.00',
-      change: '+0%',
-      trend: 'up',
+      title: "Current Balance",
+      value: "₱0.00",
+      change: "+0%",
+      trend: "up",
       icon: Coins,
-      color: 'purple',
+      color: "purple",
     },
   ]);
 
-  const colorMap: Record<string, { bg: string; text: string; iconBg: string }> = {
-    blue: { bg: 'bg-blue-50 dark:bg-blue-500/10', text: 'text-blue-700 dark:text-blue-400', iconBg: 'bg-blue-500' },
-    green: { bg: 'bg-green-50 dark:bg-green-500/10', text: 'text-green-700 dark:text-green-400', iconBg: 'bg-green-500' },
-    orange: { bg: 'bg-orange-50 dark:bg-orange-500/10', text: 'text-orange-700 dark:text-orange-400', iconBg: 'bg-orange-500' },
-    purple: { bg: 'bg-purple-50 dark:bg-purple-500/10', text: 'text-purple-700 dark:text-purple-400', iconBg: 'bg-purple-500' },
-  };
+  const colorMap: Record<string, { bg: string; text: string; iconBg: string }> =
+    {
+      blue: {
+        bg: "bg-blue-50 dark:bg-blue-500/10",
+        text: "text-blue-700 dark:text-blue-400",
+        iconBg: "bg-blue-500",
+      },
+      green: {
+        bg: "bg-green-50 dark:bg-green-500/10",
+        text: "text-green-700 dark:text-green-400",
+        iconBg: "bg-green-500",
+      },
+      orange: {
+        bg: "bg-orange-50 dark:bg-orange-500/10",
+        text: "text-orange-700 dark:text-orange-400",
+        iconBg: "bg-orange-500",
+      },
+      purple: {
+        bg: "bg-purple-50 dark:bg-purple-500/10",
+        text: "text-purple-700 dark:text-purple-400",
+        iconBg: "bg-purple-500",
+      },
+    };
 
   return (
     <div className="p-6 space-y-6">
@@ -62,7 +79,9 @@ const TreasuryHome = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Treasury</h1>
-          <p className="text-sm text-muted">Manage treasury accounts, receipts, and disbursements</p>
+          <p className="text-sm text-muted">
+            Manage treasury accounts, receipts, and disbursements
+          </p>
         </div>
       </div>
 
@@ -71,7 +90,7 @@ const TreasuryHome = () => {
         {stats.map((stat, idx) => {
           const colors = colorMap[stat.color];
           const Icon = stat.icon;
-          const TrendIcon = stat.trend === 'up' ? TrendingUp : TrendingDown;
+          const TrendIcon = stat.trend === "up" ? TrendingUp : TrendingDown;
 
           return (
             <div
@@ -82,12 +101,16 @@ const TreasuryHome = () => {
                 <div className={`p-2.5 rounded-lg ${colors.iconBg}`}>
                   <Icon className="w-5 h-5 text-white" />
                 </div>
-                <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${colors.bg} ${colors.text}`}>
+                <div
+                  className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${colors.bg} ${colors.text}`}
+                >
                   <TrendIcon className="w-3 h-3" />
                   {stat.change}
                 </div>
               </div>
-              <h3 className="text-2xl font-bold text-foreground mb-1">{stat.value}</h3>
+              <h3 className="text-2xl font-bold text-foreground mb-1">
+                {stat.value}
+              </h3>
               <p className="text-sm text-muted">{stat.title}</p>
             </div>
           );
@@ -108,46 +131,54 @@ const TreasuryHome = () => {
         </button>
 
         <button
-          onClick={() => navigate('cashflow')}
+          onClick={() => navigate("cashflow")}
           className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
         >
           <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
             <BarChart3 className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">Cashflow Monitoring</h3>
+          <h3 className="font-semibold text-foreground mb-1">
+            Cashflow Monitoring
+          </h3>
           <p className="text-xs text-muted">Track cash inflows and outflows</p>
         </button>
 
         <button
-          onClick={() => navigate('collections')}
+          onClick={() => navigate("collections")}
           className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
         >
           <div className="p-3 bg-gradient-to-br from-green-500 to-green-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
             <TrendingUp className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">Collection Monitoring</h3>
+          <h3 className="font-semibold text-foreground mb-1">
+            Collection Monitoring
+          </h3>
           <p className="text-xs text-muted">Monitor revenue collections</p>
         </button>
 
         <button
-          onClick={() => navigate('disbursements')}
+          onClick={() => navigate("disbursements")}
           className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
         >
           <div className="p-3 bg-gradient-to-br from-orange-500 to-orange-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
             <TrendingDown className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">Disbursement Tracking</h3>
+          <h3 className="font-semibold text-foreground mb-1">
+            Disbursement Tracking
+          </h3>
           <p className="text-xs text-muted">Monitor all fund disbursements</p>
         </button>
 
         <button
-          onClick={() => navigate('reconciliation')}
+          onClick={() => navigate("reconciliation")}
           className="bg-surface border border-border rounded-xl p-6 hover:shadow-lg transition-all hover:border-primary group text-left"
         >
           <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-400 rounded-lg w-fit mb-3 group-hover:shadow-lg transition-shadow">
             <Landmark className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-foreground mb-1">Bank Reconciliation</h3>
+          <h3 className="font-semibold text-foreground mb-1">
+            Bank Reconciliation
+          </h3>
           <p className="text-xs text-muted">Reconcile bank accounts</p>
         </button>
       </div>
@@ -160,7 +191,9 @@ const TreasuryHome = () => {
             <div className="p-2 bg-green-500/10 rounded-lg">
               <ArrowDownRight className="w-5 h-5 text-green-600 dark:text-green-400" />
             </div>
-            <h2 className="text-lg font-semibold text-foreground">Recent Receipts</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              Recent Receipts
+            </h2>
           </div>
           <div className="text-center py-12 text-muted">
             <p className="text-sm">No recent receipts</p>
@@ -174,22 +207,30 @@ const TreasuryHome = () => {
             <div className="p-2 bg-orange-500/10 rounded-lg">
               <ArrowUpRight className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <h2 className="text-lg font-semibold text-foreground">Recent Disbursements</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              Recent Disbursements
+            </h2>
           </div>
           <div className="text-center py-12 text-muted">
             <p className="text-sm">No recent disbursements</p>
-            <p className="text-xs mt-1">Treasury disbursements will appear here</p>
+            <p className="text-xs mt-1">
+              Treasury disbursements will appear here
+            </p>
           </div>
         </div>
       </div>
 
       {/* Account Summary */}
       <div className="bg-surface border border-border rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Treasury Account Summary</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">
+          Treasury Account Summary
+        </h2>
         <div className="text-center py-12 text-muted">
           <Wallet className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p className="text-sm">No treasury accounts configured</p>
-          <p className="text-xs mt-1">Configure treasury accounts in the General Accounting Plan</p>
+          <p className="text-xs mt-1">
+            Configure treasury accounts in the General Accounting Plan
+          </p>
         </div>
       </div>
     </div>
@@ -207,7 +248,7 @@ const Treasury = () => {
         element={
           <div>
             <button
-              onClick={() => navigate('..')}
+              onClick={() => navigate("..")}
               className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -222,7 +263,7 @@ const Treasury = () => {
         element={
           <div>
             <button
-              onClick={() => navigate('..')}
+              onClick={() => navigate("..")}
               className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -237,7 +278,7 @@ const Treasury = () => {
         element={
           <div>
             <button
-              onClick={() => navigate('..')}
+              onClick={() => navigate("..")}
               className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -252,7 +293,7 @@ const Treasury = () => {
         element={
           <div>
             <button
-              onClick={() => navigate('..')}
+              onClick={() => navigate("..")}
               className="p-2 mb-4 flex items-center gap-2 text-sm text-foreground hover:bg-surface rounded-lg transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />

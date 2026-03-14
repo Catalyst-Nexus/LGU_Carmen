@@ -1,6 +1,7 @@
 import { useSettingsStore } from "@/store";
 import { cn } from "@/lib/utils";
 import { uploadImage } from "@/services/imageUpload";
+import { useResolvedAvatarUrl } from "@/hooks/useResolvedAvatarUrl";
 import { useState, useRef } from "react";
 import {
   Search,
@@ -42,6 +43,8 @@ const Settings = () => {
     setReducedMotion,
     setSystemLogo,
   } = useSettingsStore();
+  const systemLogoPath = useSettingsStore((state) => state.systemLogoPath);
+  const resolvedLogoUrl = useResolvedAvatarUrl(systemLogoPath, "system_logo");
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -74,7 +77,7 @@ const Settings = () => {
     const result = await uploadImage(file, "system_logo", `logo-${Date.now()}`);
 
     if (result.success && result.url) {
-      setSystemLogo(result.url);
+      setSystemLogo(result.url, result.path);
     } else {
       setLogoError(result.error || "Failed to upload logo");
     }
@@ -316,7 +319,7 @@ const Settings = () => {
               <div className="flex items-center gap-4 p-4 bg-background rounded-xl">
                 <div className="w-20 h-20 rounded-lg overflow-hidden bg-white border border-border flex items-center justify-center">
                   <img
-                    src={systemLogo}
+                    src={resolvedLogoUrl || systemLogo}
                     alt="System Logo"
                     className="w-full h-full object-contain"
                   />
