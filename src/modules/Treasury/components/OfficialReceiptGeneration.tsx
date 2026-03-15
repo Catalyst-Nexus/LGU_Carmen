@@ -32,7 +32,7 @@ export default function OfficialReceiptGeneration({
   const [search, setSearch] = useState('');
 
   const activeCodes = useMemo(
-    () => accountCodes.filter((item) => item.is_active),
+    () => accountCodes,
     [accountCodes]
   );
 
@@ -129,7 +129,6 @@ export default function OfficialReceiptGeneration({
 
     const accountDesc = item.account?.description || item.account_code || '—';
     const accountCode = item.account?.code || item.account_code || '—';
-    const fundType = item.account?.fund_type || '—';
     const formattedAmount = Number(item.amount).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -164,7 +163,6 @@ export default function OfficialReceiptGeneration({
           <div class="row"><span class="label">Type:</span> ${item.type}</div>
           <div class="row"><span class="label">Account Title:</span> ${accountDesc}</div>
           <div class="row"><span class="label">Account Code:</span> ${accountCode}</div>
-          <div class="row"><span class="label">Fund Type:</span> ${fundType}</div>
         </div>
         <div class="total">
           <div class="row"><span class="label">Total Amount:</span> <strong>₱${formattedAmount}</strong></div>

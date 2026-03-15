@@ -103,7 +103,7 @@ export default function AccountTitleCombobox({
                 onClick={() => handleSelect(item)}
               >
                 <div className="font-medium text-foreground">{item.description}</div>
-                <div className="text-xs text-muted">{item.code} • {item.fund_type}</div>
+                <div className="text-xs text-muted">{item.code}</div>
               </button>
             ))
           )}

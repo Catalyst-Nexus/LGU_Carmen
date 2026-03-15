@@ -116,15 +116,11 @@ export interface TreasuryStats {
   total_amount_year: number;
 }
 
-export type TreasuryFundType = 'General' | 'SEF' | 'Trust';
-
 export interface TreasuryAccountCode {
   id: string;
   code: string;
   description: string;
   category: string;
-  fund_type: TreasuryFundType;
-  is_active: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -133,16 +129,12 @@ export interface CreateTreasuryAccountCodePayload {
   code: string;
   description: string;
   category: string;
-  fund_type: TreasuryFundType;
-  is_active: boolean;
 }
 
 export interface UpdateTreasuryAccountCodePayload {
   code?: string;
   description?: string;
   category?: string;
-  fund_type?: TreasuryFundType;
-  is_active?: boolean;
 }
 
 export interface TreasuryOfficialReceipt {

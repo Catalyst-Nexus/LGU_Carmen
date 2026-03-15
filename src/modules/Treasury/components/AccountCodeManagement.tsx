@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
-import { ActionsBar, IconButton, PrimaryButton, StatusBadge } from '@/components/ui';
+import { ActionsBar, IconButton, PrimaryButton } from '@/components/ui';
 import { BaseDialog, FormInput } from '@/components/ui/dialog';
 import { supabase } from '@/services/supabase';
-import type { TreasuryAccountCode, TreasuryFundType } from '@/types/treasury.types';
-
-const FUND_TYPES: TreasuryFundType[] = ['General', 'SEF', 'Trust'];
+import type { TreasuryAccountCode } from '@/types/treasury.types';
 
 interface AccountCodeManagementProps {
   accountCodes: TreasuryAccountCode[];
@@ -21,8 +19,6 @@ export default function AccountCodeManagement({
   onCodeDelete,
 }: AccountCodeManagementProps) {
   const [search, setSearch] = useState('');
-  const [fundFilter, setFundFilter] = useState<'all' | TreasuryFundType>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,16 +28,12 @@ export default function AccountCodeManagement({
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
-  const [fundType, setFundType] = useState<TreasuryFundType>('General');
-  const [isActive, setIsActive] = useState(true);
 
   const openAdd = () => {
     setEditing(null);
     setCode('');
     setTitle('');
     setCategory('');
-    setFundType('General');
-    setIsActive(true);
     setError('');
     setDialogOpen(true);
   };
@@ -51,8 +43,6 @@ export default function AccountCodeManagement({
     setCode(item.code);
     setTitle(item.description);
     setCategory(item.category);
-    setFundType(item.fund_type);
-    setIsActive(item.is_active);
     setError('');
     setDialogOpen(true);
   };
@@ -60,17 +50,13 @@ export default function AccountCodeManagement({
   const filtered = useMemo(() => {
     return accountCodes.filter((item) => {
       const term = search.toLowerCase();
-      const matchesSearch =
+      return (
         !search.trim() ||
         item.code.toLowerCase().includes(term) ||
-        item.description.toLowerCase().includes(term);
-      const matchesFund = fundFilter === 'all' || item.fund_type === fundFilter;
-      const matchesStatus =
-        statusFilter === 'all' ||
-        (statusFilter === 'active' ? item.is_active : !item.is_active);
-      return matchesSearch && matchesFund && matchesStatus;
+        item.description.toLowerCase().includes(term)
+      );
     });
-  }, [accountCodes, fundFilter, search, statusFilter]);
+  }, [accountCodes, search]);
 
   const handleSubmit = async () => {
     if (!supabase) {
@@ -95,8 +81,6 @@ export default function AccountCodeManagement({
       code: code.trim(),
       description: title.trim(),
       category: category.trim(),
-      fund_type: fundType,
-      is_active: isActive,
     };
 
     const payload = editing ? { id: editing.id, ...basePayload } : basePayload;
@@ -166,29 +150,6 @@ export default function AccountCodeManagement({
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-
-          <select
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={fundFilter}
-            onChange={(event) => setFundFilter(event.target.value as 'all' | TreasuryFundType)}
-          >
-            <option value="all">All Fund Types</option>
-            {FUND_TYPES.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
         </div>
 
         <div className="overflow-x-auto">
@@ -199,21 +160,19 @@ export default function AccountCodeManagement({
                 <th className={thCls}>Code</th>
                 <th className={thCls}>Account Title</th>
                 <th className={thCls}>Category</th>
-                <th className={thCls}>Fund Type</th>
-                <th className={thCls}>Status</th>
                 <th className={`${thCls} text-right`}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={5} className="text-center text-muted py-8 border-b border-border/50">
                     Loading account codes...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={5} className="text-center text-muted py-8 border-b border-border/50">
                     No account codes found.
                   </td>
                 </tr>
@@ -224,10 +183,6 @@ export default function AccountCodeManagement({
                     <td className={tdCls}>{item.code}</td>
                     <td className={tdCls}>{item.description}</td>
                     <td className={tdCls}>{item.category}</td>
-                    <td className={tdCls}>{item.fund_type}</td>
-                    <td className={tdCls}>
-                      <StatusBadge status={item.is_active ? 'active' : 'inactive'} />
-                    </td>
                     <td className={`${tdCls} text-right`}>
                       <div className="flex items-center justify-end gap-1">
                         <IconButton title="Edit" onClick={() => openEdit(item)}>
@@ -286,46 +241,6 @@ export default function AccountCodeManagement({
             onChange={setCategory}
             placeholder="e.g., Tax Revenue"
           />
-
-          <div className="space-y-1.5">
-            <label htmlFor="treasury-fund-type" className="block text-sm font-medium text-foreground">
-              Fund Type <span className="text-error ml-1">*</span>
-            </label>
-            <select
-              id="treasury-fund-type"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-              value={fundType}
-              onChange={(event) => setFundType(event.target.value as TreasuryFundType)}
-            >
-              {FUND_TYPES.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center justify-between py-2.5 px-4 border border-border rounded-lg">
-            <label htmlFor="treasury-code-status" className="text-sm font-medium text-foreground cursor-pointer select-none">
-              Status
-            </label>
-            <button
-              id="treasury-code-status"
-              type="button"
-              role="switch"
-              aria-checked={isActive}
-              onClick={() => setIsActive(!isActive)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                isActive ? 'bg-success' : 'bg-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  isActive ? 'translate-x-5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
         </div>
       </BaseDialog>
     </>
