@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useSettingsStore } from "@/store";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useResolvedAvatarUrl } from "@/hooks/useResolvedAvatarUrl";
 import { getIconByName } from "@/lib/iconMap";
 import { cn } from "@/lib/utils";
 import {
@@ -285,6 +286,7 @@ const Sidebar = () => {
   );
   const compactMode = useSettingsStore((state) => state.compactMode);
   const systemLogo = useSettingsStore((state) => state.systemLogo);
+  const systemLogoPath = useSettingsStore((state) => state.systemLogoPath);
   const sidebarOrder = useSettingsStore((state) => state.sidebarOrder);
   const setSidebarOrder = useSettingsStore((state) => state.setSidebarOrder);
   const sidebarSectionOrder = useSettingsStore(
@@ -296,6 +298,8 @@ const Sidebar = () => {
   const resetSidebarOrder = useSettingsStore(
     (state) => state.resetSidebarOrder,
   );
+  const resolvedLogoUrl = useResolvedAvatarUrl(systemLogoPath, "system_logo");
+  const logoSrc = resolvedLogoUrl || systemLogo;
 
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -491,10 +495,10 @@ const Sidebar = () => {
           sidebarCollapsed && "justify-center px-2",
         )}
       >
-        {systemLogo ? (
+        {logoSrc ? (
           <div className="w-8 h-8 rounded-lg overflow-hidden bg-white border border-border shrink-0 flex items-center justify-center">
             <img
-              src={systemLogo}
+              src={logoSrc}
               alt="System Logo"
               className="w-full h-full object-contain"
             />

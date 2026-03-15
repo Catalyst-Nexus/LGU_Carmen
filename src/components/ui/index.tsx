@@ -15,6 +15,7 @@ interface StatCardProps {
   label: string;
   value: number | string;
   color?: "default" | "success" | "warning" | "danger" | "primary";
+  icon?: ReactNode;
 }
 
 const colorStyles: Record<string, string> = {
@@ -25,39 +26,37 @@ const colorStyles: Record<string, string> = {
   primary: "text-blue-600",
 };
 
-const borderStyles: Record<string, string> = {
-  default: "from-green-500 to-green-400",
-  success: "from-green-500 to-green-400",
-  warning: "from-orange-500 to-orange-400",
-  danger: "from-red-500 to-red-400",
-  primary: "from-blue-500 to-blue-400",
+const iconBgStyles: Record<string, string> = {
+  default: "bg-primary/10 text-primary",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+  primary: "bg-blue-500/10 text-blue-600",
 };
 
 export const StatCard = ({
   label,
   value,
   color = "default",
+  icon,
 }: StatCardProps) => (
-  <div className="relative flex-1 min-w-0 bg-surface border border-border rounded-xl p-5 overflow-hidden">
-    {/* Animated border */}
-    <span
-      className={cn(
-        "absolute inset-0 rounded-xl pointer-events-none",
-        "bg-gradient-to-r opacity-20",
-        borderStyles[color],
+  <div className="flex-1 min-w-0 rounded-2xl bg-white/80 p-5 shadow-[0_12px_40px_rgba(15,23,42,0.08)]">
+    <div className="flex items-center gap-3 mb-2">
+      {icon && (
+        <span
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-full border border-white/40 shadow",
+            iconBgStyles[color],
+          )}
+        >
+          {icon}
+        </span>
       )}
-      style={{
-        mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-        maskComposite: "exclude",
-        padding: "1px",
-      }}
-    />
-    <span className="block text-xs font-medium uppercase tracking-wider text-muted mb-1">
-      {label}
-    </span>
-    <span className={cn("block text-2xl font-bold", colorStyles[color])}>
-      {value}
-    </span>
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted">
+        {label}
+      </span>
+    </div>
+    <span className={cn("text-3xl font-bold leading-none", colorStyles[color])}>{value}</span>
   </div>
 );
 
@@ -378,35 +377,39 @@ export function DataTable<T extends { id: string }>({
         {totalPages > 1 && (
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={safePage === 1}
+              aria-label="Previous page"
               className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             {Array.from({ length: totalPages }).map((_, i) => {
-              const page = i + 1;
-              // Show first, last, and pages near current
-              if (
-                page === 1 ||
-                page === totalPages ||
-                Math.abs(page - safePage) <= 1
-              ) {
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={cn(
-                      "min-w-[32px] h-8 rounded text-sm font-medium transition-colors",
-                      page === safePage
-                        ? "bg-success text-white"
-                        : "hover:bg-background",
-                    )}
-                  >
-                    {page}
-                  </button>
-                );
-              }
+            const page = i + 1;
+            // Show first, last, and pages near current
+            if (
+              page === 1 ||
+              page === totalPages ||
+              Math.abs(page - safePage) <= 1
+            ) {
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-label={`Go to page ${page}`}
+                  className={cn(
+                    "min-w-[32px] h-8 rounded text-sm font-medium transition-colors",
+                    page === safePage
+                      ? "bg-success text-white"
+                      : "hover:bg-background",
+                  )}
+                >
+                  {page}
+                </button>
+              );
+            }
               // Ellipsis — only render once per gap
               if (page === 2 && safePage > 3) {
                 return (
@@ -425,8 +428,10 @@ export function DataTable<T extends { id: string }>({
               return null;
             })}
             <button
+              type="button"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
+              aria-label="Next page"
               className="p-1.5 rounded hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="w-4 h-4" />

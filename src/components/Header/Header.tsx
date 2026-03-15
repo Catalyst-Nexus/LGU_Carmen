@@ -9,6 +9,7 @@ const Header = () => {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const systemLogo = useSettingsStore((state) => state.systemLogo);
+  const systemLogoPath = useSettingsStore((state) => state.systemLogoPath);
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -16,6 +17,8 @@ const Header = () => {
     user?.profilePicture,
     "profile_picture",
   );
+  const resolvedLogoUrl = useResolvedAvatarUrl(systemLogoPath, "system_logo");
+  const logoSrc = resolvedLogoUrl || systemLogo;
 
   const handleLogout = () => {
     logout();
@@ -53,10 +56,10 @@ const Header = () => {
       {/* Logo and Search */}
       <div className="flex items-center gap-6">
         {/* System Logo */}
-        {systemLogo && (
+        {logoSrc && (
           <div className="flex items-center justify-center w-10 h-10 rounded-lg overflow-hidden bg-white border border-border">
             <img
-              src={systemLogo}
+              src={logoSrc}
               alt="System Logo"
               className="w-full h-full object-contain"
             />

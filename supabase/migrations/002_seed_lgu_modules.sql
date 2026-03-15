@@ -32,6 +32,23 @@ ON CONFLICT (route_path) DO UPDATE
       is_active   = EXCLUDED.is_active;
 
 -- ==========================
+-- ACCOUNTING MODULE
+-- ==========================
+
+INSERT INTO modules (module_name, route_path, file_path, category, icons, is_active)
+VALUES
+  ('Estimate Income',               '/accounting/estimate-income',              'modules/Accounting/pages/EstimateIncome',              'ACCOUNTING', 'BadgeDollarSign', true),
+  ('General Accounting Plan',       '/accounting/general-accounting-plan',      'modules/Accounting/pages/GeneralAccountingPlan',       'ACCOUNTING', 'BookOpen',        true),
+  ('Classification Appropriation',  '/accounting/classification-appropriation', 'modules/Accounting/pages/ClassificationAppropriation', 'ACCOUNTING', 'FolderTree',      true),
+  ('Treasury',                      '/accounting/treasury',                     'modules/Accounting/pages/Treasury',                    'TREASURY',   'Coins',           true)
+ON CONFLICT (route_path) DO UPDATE
+  SET module_name = EXCLUDED.module_name,
+      file_path   = EXCLUDED.file_path,
+      category    = EXCLUDED.category,
+      icons       = EXCLUDED.icons,
+      is_active   = EXCLUDED.is_active;
+
+-- ==========================
 -- SYSTEM ADMIN MODULE
 -- ==========================
 

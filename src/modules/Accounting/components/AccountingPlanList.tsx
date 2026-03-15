@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { Pencil, Trash2, ChevronDown, ChevronUp, Plus, Search, Check, X } from 'lucide-react';
+import { Pencil, Trash2, Plus, Search, Check, X } from 'lucide-react';
 import { StatusBadge, IconButton } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import type { GeneralAccountingPlan, GeneralAccountingPlanSub } from '@/types/accounting.types';
@@ -33,7 +33,6 @@ const AccountingPlanList = ({
   onDeleteSub,
   subSaving = false,
 }: AccountingPlanListProps) => {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [inlineForm, setInlineForm] = useState<InlineSubForm | null>(null);
 
   const filtered = search.trim()
@@ -41,13 +40,11 @@ const AccountingPlanList = ({
     : plans;
 
   const openAddSub = (planId: string) => {
-    setExpandedId(planId);
     setInlineForm({ planId, editId: null, description: '' });
   };
 
   const openEditSub = (sub: GeneralAccountingPlanSub) => {
     if (!sub.editable) return;
-    setExpandedId(sub.general_accounting_plan_id);
     setInlineForm({ planId: sub.general_accounting_plan_id, editId: sub.id, description: sub.description });
   };
 
@@ -97,7 +94,6 @@ const AccountingPlanList = ({
             ) : (
               filtered.map((plan, idx) => {
                 const planSubs = subs.filter((s) => s.general_accounting_plan_id === plan.id);
-                const isExpanded = expandedId === plan.id;
                 const isInlineActive = inlineForm?.planId === plan.id;
 
                 return (
@@ -108,16 +104,9 @@ const AccountingPlanList = ({
                       <td className={tdCls}>{plan.description}</td>
                       <td className={tdCls}>
                         {plan.has_sub ? (
-                          <button
-                            className="flex items-center gap-1.5 text-xs font-medium text-success hover:text-success/80 transition-colors"
-                            onClick={() => {
-                              if (isExpanded) { setExpandedId(null); setInlineForm(null); }
-                              else setExpandedId(plan.id);
-                            }}
-                          >
-                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          <span className="text-xs font-medium text-success">
                             {planSubs.length} sub{planSubs.length !== 1 ? 's' : ''}
-                          </button>
+                          </span>
                         ) : (
                           <span className="text-xs text-muted">—</span>
                         )}
@@ -137,7 +126,7 @@ const AccountingPlanList = ({
                       </td>
                     </tr>
 
-                    {plan.has_sub && isExpanded && (
+                    {plan.has_sub && (
                       <tr>
                         <td colSpan={6} className="px-4 py-4 bg-background border-b border-border/50">
                           <div className="ml-6 space-y-3">
