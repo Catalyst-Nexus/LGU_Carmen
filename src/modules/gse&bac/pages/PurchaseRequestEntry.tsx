@@ -47,6 +47,7 @@ import {
   generateNextPRNumber,
   getOrCreateItem,
   getOrCreateUnit,
+  getOrCreateSpec,
   fetchItems,
   fetchUnits,
   fetchSpecs,
@@ -56,6 +57,7 @@ import {
   fetchAllCatalogSpecValues,
   fetchPreviousPRLinesByItem,
 } from "@/services/gseService";
+import { fetchPRsWithRemainingBudget } from "@/services/bacService";
 import type { ItemSpecDefault, PreviousPRLine } from "@/services/gseService";
 
 type ViewMode = "list" | "form";
@@ -209,7 +211,9 @@ const PurchaseRequestEntry = () => {
   // Loading state for previous PR lines
   const [loadingPrevLines, setLoadingPrevLines] = useState(false);
   // Which rows have specs section visible (tracks multiple rows)
-  const [showSpecsRowIds, setShowSpecsRowIds] = useState<Set<string>>(new Set());
+  const [showSpecsRowIds, setShowSpecsRowIds] = useState<Set<string>>(
+    new Set(),
+  );
   // Which row's spec selection dropdown is open
   const [specSelectRowId, setSpecSelectRowId] = useState<string | null>(null);
 
@@ -220,6 +224,15 @@ const PurchaseRequestEntry = () => {
   const [showAddSec, setShowAddSec] = useState(false);
   const [addSecName, setAddSecName] = useState("");
   const [isAddingSec, setIsAddingSec] = useState(false);
+
+  // ─── PRs with remaining budget ─────────────────────────
+  type PRWithBudget = PurchaseRequest & {
+    consumed_amount: number;
+    remaining_budget: number;
+  };
+  const [prsWithBudget, setPrsWithBudget] = useState<PRWithBudget[]>([]);
+  const [selectedParentPrId, setSelectedParentPrId] = useState<string>("");
+  const [useExistingBudget, setUseExistingBudget] = useState(false);
 
   // ───────────────────────────────────────────────────────
   // DATA LOADING
@@ -338,7 +351,7 @@ const PurchaseRequestEntry = () => {
         item_description: l.item_description || "",
         unit_code: l.unit_code || "",
       }));
-      setDraftRows([...rows, emptyRow()]);
+      setDraftRows(rows.length > 0 ? rows : [emptyRow()]);
       // Pre-load catalog specs for all items in this PR
       const uniqueIIds = [
         ...new Set(loadedLines.map((l) => l.i_id).filter(Boolean)),
@@ -366,6 +379,11 @@ const PurchaseRequestEntry = () => {
       setRemarks("");
       setRequestedBy("");
       setDraftRows([emptyRow()]);
+      // Load PRs with remaining budget for selection
+      const prsWithBudgetData = await fetchPRsWithRemainingBudget();
+      setPrsWithBudget(prsWithBudgetData as PRWithBudget[]);
+      setSelectedParentPrId("");
+      setUseExistingBudget(false);
     }
     setRemovedPrlIds([]);
     setMode("form");
@@ -387,6 +405,17 @@ const PurchaseRequestEntry = () => {
       return;
     }
 
+    // Validate budget when using existing PR budget
+    if (useExistingBudget && selectedParentPrId) {
+      const selectedPr = prsWithBudget.find((p) => p.pr_id === selectedParentPrId);
+      if (selectedPr && total > selectedPr.remaining_budget) {
+        alert(
+          `Total amount (₱${peso(total)}) exceeds the remaining budget (₱${peso(selectedPr.remaining_budget)}) from the selected PR. Please reduce the quantity or unit price.`
+        );
+        return;
+      }
+    }
+
     setIsSaving(true);
     const formData: PurchaseRequestFormData = {
       pr_no: prNo,
@@ -405,6 +434,19 @@ const PurchaseRequestEntry = () => {
         r.qty &&
         parseFloat(r.qty) > 0,
     );
+
+    // Ensure all new spec names are saved to the specs table
+    const allSpecLabels = new Set<string>();
+    for (const row of validRows) {
+      for (const entry of row.specEntries) {
+        if (entry.label.trim() && !entry.s_id) {
+          allSpecLabels.add(entry.label.trim());
+        }
+      }
+    }
+    for (const label of allSpecLabels) {
+      await getOrCreateSpec(label);
+    }
 
     if (editingPR) {
       const payload = status ? { ...formData, status } : formData;
@@ -629,6 +671,106 @@ const PurchaseRequestEntry = () => {
             )}
           </div>
         </div>
+
+        {/* ── Use Existing Budget Option (only for new PRs) ─ */}
+        {!editingPR && prsWithBudget.length > 0 && (
+          <div className="max-w-7xl mx-auto bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useExistingBudget}
+                  onChange={(e) => {
+                    setUseExistingBudget(e.target.checked);
+                    if (!e.target.checked) {
+                      setSelectedParentPrId("");
+                    }
+                  }}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-blue-800">
+                  Use remaining budget from an existing approved PR
+                </span>
+              </label>
+            </div>
+            {useExistingBudget && (
+              <div className="mt-3 flex flex-wrap items-end gap-4">
+                <div className="flex-1 min-w-[300px]">
+                  <label className="text-xs text-blue-700 font-medium block mb-1">
+                    Select PR with Remaining Budget:
+                  </label>
+                  <select
+                    className="w-full text-sm border border-blue-300 rounded px-3 py-2 bg-white"
+                    value={selectedParentPrId}
+                    onChange={(e) => {
+                      const selPrId = e.target.value;
+                      setSelectedParentPrId(selPrId);
+                      // Pre-fill department and section from selected PR
+                      const selPr = prsWithBudget.find(
+                        (p) => p.pr_id === selPrId,
+                      );
+                      if (selPr) {
+                        setRcId(selPr.rc_id);
+                        setRcsId(selPr.rcs_id || "");
+                        // Also copy purpose as reference
+                        setPurpose(selPr.purpose || "");
+                      }
+                    }}
+                  >
+                    <option value="">-- Select a PR --</option>
+                    {prsWithBudget.map((pr) => {
+                      const deptName =
+                        centers.find((c) => c.id === pr.rc_id)?.description ||
+                        "";
+                      return (
+                        <option key={pr.pr_id} value={pr.pr_id}>
+                          {pr.pr_no} - {deptName} | Remaining: ₱
+                          {peso(pr.remaining_budget)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                {selectedParentPrId && (
+                  <div className="bg-white border border-blue-300 rounded px-4 py-2">
+                    {(() => {
+                      const selPr = prsWithBudget.find(
+                        (p) => p.pr_id === selectedParentPrId,
+                      );
+                      if (!selPr) return null;
+                      return (
+                        <div className="text-xs space-y-1">
+                          <div className="flex justify-between gap-6">
+                            <span className="text-gray-500">
+                              Original Budget:
+                            </span>
+                            <span className="font-semibold">
+                              ₱{peso(selPr.pr_total_amount || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6">
+                            <span className="text-gray-500">Consumed:</span>
+                            <span className="font-semibold text-orange-600">
+                              ₱{peso(selPr.consumed_amount)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-6 border-t pt-1">
+                            <span className="text-gray-700 font-medium">
+                              Remaining:
+                            </span>
+                            <span className="font-bold text-green-600">
+                              ₱{peso(selPr.remaining_budget)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Paper document ─────────────────────────────── */}
         <div className="bg-white border-2 border-gray-800 max-w-7xl mx-auto shadow-lg print:shadow-none text-gray-900">
@@ -1052,10 +1194,20 @@ const PurchaseRequestEntry = () => {
                               <button
                                 type="button"
                                 className="w-full text-xs bg-white border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:border-blue-500 cursor-pointer text-left flex items-center justify-between"
-                                onClick={() => setSpecSelectRowId(specSelectRowId === row.localId ? null : row.localId)}
+                                onClick={() =>
+                                  setSpecSelectRowId(
+                                    specSelectRowId === row.localId
+                                      ? null
+                                      : row.localId,
+                                  )
+                                }
                               >
-                                <span className="text-gray-500">-- See list of specifications --</span>
-                                <span className="text-gray-400">{specSelectRowId === row.localId ? "▲" : "▼"}</span>
+                                <span className="text-gray-500">
+                                  -- See list of specifications --
+                                </span>
+                                <span className="text-gray-400">
+                                  {specSelectRowId === row.localId ? "▲" : "▼"}
+                                </span>
                               </button>
                               {specSelectRowId === row.localId && (
                                 <div className="absolute z-50 left-0 top-full mt-0.5 bg-white border border-gray-300 rounded-lg shadow-xl w-full min-w-[400px] max-h-60 overflow-y-auto">
@@ -1064,45 +1216,60 @@ const PurchaseRequestEntry = () => {
                                       No previous specifications
                                     </div>
                                   ) : (
-                                    uniqueLines.slice(0, 10).map((prev, pIdx) => {
-                                      const specs = parseSpecEntries(prev.specifications);
-                                      const specSummary =
-                                        specs.length > 0
-                                          ? specs
-                                              .map((s) => `${s.label}: ${s.value}`)
-                                              .join(", ")
-                                          : "No specs";
-                                      const rowColors = [
-                                        "bg-blue-50 hover:bg-blue-100 border-l-blue-500",
-                                        "bg-green-50 hover:bg-green-100 border-l-green-500",
-                                        "bg-purple-50 hover:bg-purple-100 border-l-purple-500",
-                                        "bg-amber-50 hover:bg-amber-100 border-l-amber-500",
-                                        "bg-rose-50 hover:bg-rose-100 border-l-rose-500",
-                                        "bg-teal-50 hover:bg-teal-100 border-l-teal-500",
-                                        "bg-indigo-50 hover:bg-indigo-100 border-l-indigo-500",
-                                        "bg-orange-50 hover:bg-orange-100 border-l-orange-500",
-                                        "bg-cyan-50 hover:bg-cyan-100 border-l-cyan-500",
-                                        "bg-pink-50 hover:bg-pink-100 border-l-pink-500",
-                                      ];
-                                      const colorCls = rowColors[pIdx % rowColors.length];
-                                      return (
-                                        <button
-                                          key={prev.prl_id}
-                                          type="button"
-                                          className={`w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 border-l-4 transition-colors ${colorCls}`}
-                                          onClick={() => {
-                                            const specEntries = parseSpecEntries(prev.specifications);
-                                            updateDraftRow(row.localId, { specEntries });
-                                            setShowSpecsRowIds((prev) => new Set(prev).add(row.localId));
-                                            setSpecSelectRowId(null);
-                                          }}
-                                        >
-                                          <div className="text-[11px] text-gray-700 whitespace-normal break-words">
-                                            {specSummary}
-                                          </div>
-                                        </button>
-                                      );
-                                    })
+                                    uniqueLines
+                                      .slice(0, 10)
+                                      .map((prev, pIdx) => {
+                                        const specs = parseSpecEntries(
+                                          prev.specifications,
+                                        );
+                                        const specSummary =
+                                          specs.length > 0
+                                            ? specs
+                                                .map(
+                                                  (s) =>
+                                                    `${s.label}: ${s.value}`,
+                                                )
+                                                .join(", ")
+                                            : "No specs";
+                                        const rowColors = [
+                                          "bg-blue-50 hover:bg-blue-100 border-l-blue-500",
+                                          "bg-green-50 hover:bg-green-100 border-l-green-500",
+                                          "bg-purple-50 hover:bg-purple-100 border-l-purple-500",
+                                          "bg-amber-50 hover:bg-amber-100 border-l-amber-500",
+                                          "bg-rose-50 hover:bg-rose-100 border-l-rose-500",
+                                          "bg-teal-50 hover:bg-teal-100 border-l-teal-500",
+                                          "bg-indigo-50 hover:bg-indigo-100 border-l-indigo-500",
+                                          "bg-orange-50 hover:bg-orange-100 border-l-orange-500",
+                                          "bg-cyan-50 hover:bg-cyan-100 border-l-cyan-500",
+                                          "bg-pink-50 hover:bg-pink-100 border-l-pink-500",
+                                        ];
+                                        const colorCls =
+                                          rowColors[pIdx % rowColors.length];
+                                        return (
+                                          <button
+                                            key={prev.prl_id}
+                                            type="button"
+                                            className={`w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 border-l-4 transition-colors ${colorCls}`}
+                                            onClick={() => {
+                                              const specEntries =
+                                                parseSpecEntries(
+                                                  prev.specifications,
+                                                );
+                                              updateDraftRow(row.localId, {
+                                                specEntries,
+                                              });
+                                              setShowSpecsRowIds((prev) =>
+                                                new Set(prev).add(row.localId),
+                                              );
+                                              setSpecSelectRowId(null);
+                                            }}
+                                          >
+                                            <div className="text-[11px] text-gray-700 whitespace-normal break-words">
+                                              {specSummary}
+                                            </div>
+                                          </button>
+                                        );
+                                      })
                                   )}
                                 </div>
                               )}
@@ -1129,22 +1296,31 @@ const PurchaseRequestEntry = () => {
                                     s.description.toLowerCase().includes(specQ),
                                 )
                                 .slice(0, 20);
-                              
+
                               // Get values only from this item's catalog specs
                               const itemCatalogValues = catalogSpecs
-                                .filter((d) => d.s_description === entry.label || d.s_id === entry.s_id)
+                                .filter(
+                                  (d) =>
+                                    d.s_description === entry.label ||
+                                    d.s_id === entry.s_id,
+                                )
                                 .map((d) => d.spec_value)
                                 .filter((v) => v);
-                              
+
                               // Get values from previous PR lines for THIS item only
                               const itemPrevLines = prevPRLines[row.i_id] || [];
                               const itemPastValues: string[] = [];
                               for (const line of itemPrevLines) {
                                 try {
-                                  const specs = JSON.parse(line.specifications || "[]");
+                                  const specs = JSON.parse(
+                                    line.specifications || "[]",
+                                  );
                                   if (Array.isArray(specs)) {
                                     for (const spec of specs) {
-                                      if (spec.label === entry.label && spec.value) {
+                                      if (
+                                        spec.label === entry.label &&
+                                        spec.value
+                                      ) {
                                         itemPastValues.push(spec.value);
                                       }
                                     }
@@ -1153,7 +1329,7 @@ const PurchaseRequestEntry = () => {
                                   // ignore parse errors
                                 }
                               }
-                              
+
                               // Combine item-specific values only (no global values)
                               const allValues = [
                                 ...new Set([
@@ -1222,7 +1398,7 @@ const PurchaseRequestEntry = () => {
                                                     {
                                                       s_id: s.id,
                                                       label: s.description,
-                                                      value: defaultVal,
+                                                      // Don't auto-populate value - let user select from value dropdown
                                                     },
                                                   );
                                                   setSpecSuggestionKey(null);
@@ -1282,7 +1458,9 @@ const PurchaseRequestEntry = () => {
                                       allValues.length > 0 && (
                                         <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-300 rounded-lg shadow-xl min-w-[140px] w-max max-h-36 overflow-y-auto py-1">
                                           {allValues.map((v) => {
-                                            const isMatch = !valueQ || v.toLowerCase().includes(valueQ);
+                                            const isMatch =
+                                              !valueQ ||
+                                              v.toLowerCase().includes(valueQ);
                                             return (
                                               <button
                                                 key={v}
@@ -1331,13 +1509,15 @@ const PurchaseRequestEntry = () => {
                         type="button"
                         onClick={() => {
                           addSpecEntryToRow(row.localId);
-                          setShowSpecsRowIds((prev) => new Set(prev).add(row.localId)); // Show specs when adding new spec
+                          setShowSpecsRowIds((prev) =>
+                            new Set(prev).add(row.localId),
+                          ); // Show specs when adding new spec
                         }}
                         className="mt-1.5 flex items-center gap-0.5 text-[10px] text-blue-600 hover:text-blue-800 font-medium print:hidden"
                         hidden={isReadOnly}
                       >
                         <Plus className="w-3 h-3" />
-                        Add Spec
+                        Add Product Spec
                       </button>
                     </td>
                     <td className="border-r border-gray-800 px-1 py-1 align-top">
@@ -1418,6 +1598,25 @@ const PurchaseRequestEntry = () => {
                   {peso(total)}
                 </td>
               </tr>
+              {/* Budget Exceeded Warning */}
+              {useExistingBudget && selectedParentPrId && (() => {
+                const selectedPr = prsWithBudget.find((p) => p.pr_id === selectedParentPrId);
+                if (selectedPr && total > selectedPr.remaining_budget) {
+                  return (
+                    <tr className="bg-red-50">
+                      <td colSpan={6} className="px-3 py-2 text-xs text-red-700 font-medium">
+                        <span className="flex items-center gap-2">
+                          <span className="text-red-500">⚠️</span>
+                          Total amount (₱{peso(total)}) exceeds the remaining budget
+                          (₱{peso(selectedPr.remaining_budget)}) from selected PR.
+                          Please reduce to save.
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                }
+                return null;
+              })()}
             </tfoot>
           </table>
 

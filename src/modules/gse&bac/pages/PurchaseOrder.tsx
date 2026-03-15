@@ -19,7 +19,9 @@ import {
   Save,
   Send,
   ArrowLeft,
+  CheckCircle,
 } from "lucide-react";
+import jsPDF from "jspdf";
 import type {
   PurchaseOrder as PO,
   Abstract,
@@ -28,7 +30,6 @@ import type {
   PaymentTerm,
   ModeProcurement,
   PurchaseRequest,
-  PurchaseRequestLine,
 } from "@/types/gse.types";
 import {
   fetchPurchaseOrders,
@@ -70,7 +71,8 @@ interface POLineRow {
 
 const statusColors: Record<string, string> = {
   DRAFT: "bg-gray-500/10 text-gray-500",
-  APPROVED: "bg-green-500/10 text-green-500",
+  ISSUED: "bg-green-500/10 text-green-500",
+  RECEIVED: "bg-blue-500/10 text-blue-500",
   CANCELLED: "bg-orange-500/10 text-orange-500",
 };
 
@@ -89,6 +91,375 @@ const parseSpecEntries = (
       return [{ label: specifications.trim(), value: "" }];
   }
   return [];
+};
+
+// ────────────────────────────────────────────────────────────
+// PDF GENERATION
+// ────────────────────────────────────────────────────────────
+
+// Format number as currency (without special characters for PDF compatibility)
+const formatCurrency = (n: number) =>
+  "P " + n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const generatePOPDF = (
+  po: PO,
+  lines: POLineRow[],
+  supplier: Supplier | null,
+  abstract: Abstract | null,
+  deliveryTerm: DeliveryTerm | null,
+  paymentTerm: PaymentTerm | null,
+  modeProc: ModeProcurement | null,
+  prNo: string,
+) => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  // Page dimensions
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const marginLeft = 15;
+  const marginRight = 15;
+  const contentWidth = pageWidth - marginLeft - marginRight;
+  let y = 15;
+
+  // Colors
+  const headerBg = [240, 240, 240]; // Light gray for header backgrounds
+  const borderColor = [0, 0, 0]; // Black borders
+
+  // Helper: Draw a rectangle with border
+  const drawRect = (x: number, yPos: number, w: number, h: number, fill?: number[]) => {
+    if (fill) {
+      doc.setFillColor(fill[0], fill[1], fill[2]);
+      doc.rect(x, yPos, w, h, "F");
+    }
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.setLineWidth(0.3);
+    doc.rect(x, yPos, w, h, "S");
+  };
+
+  // Helper: Add text with alignment
+  const text = (
+    str: string,
+    x: number,
+    yPos: number,
+    options?: { align?: "left" | "center" | "right"; bold?: boolean; size?: number }
+  ) => {
+    const align = options?.align || "left";
+    const bold = options?.bold || false;
+    const size = options?.size || 9;
+
+    doc.setFontSize(size);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+
+    if (align === "center") {
+      const textWidth = doc.getTextWidth(str);
+      doc.text(str, x - textWidth / 2, yPos);
+    } else if (align === "right") {
+      const textWidth = doc.getTextWidth(str);
+      doc.text(str, x - textWidth, yPos);
+    } else {
+      doc.text(str, x, yPos);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // HEADER
+  // ═══════════════════════════════════════════════════════════
+
+  // Title
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.text("PURCHASE ORDER", pageWidth / 2, y, { align: "center" });
+  y += 8;
+
+  // Horizontal line under title
+  doc.setLineWidth(0.5);
+  doc.line(marginLeft, y, pageWidth - marginRight, y);
+  y += 6;
+
+  // ═══════════════════════════════════════════════════════════
+  // INFO SECTION - Grid Layout
+  // ═══════════════════════════════════════════════════════════
+
+  const colWidth1 = 90; // Left column
+  const colWidth2 = 45; // Middle column
+  const colWidth3 = 45; // Right column
+  const rowHeight = 12;
+  const labelSize = 7;
+  const valueSize = 9;
+
+  // Row 1: Supplier | PO No. | Date
+  let rowY = y;
+  drawRect(marginLeft, rowY, colWidth1, rowHeight);
+  drawRect(marginLeft + colWidth1, rowY, colWidth2, rowHeight);
+  drawRect(marginLeft + colWidth1 + colWidth2, rowY, colWidth3, rowHeight);
+
+  text("Supplier:", marginLeft + 2, rowY + 4, { size: labelSize });
+  text(supplier?.description || "-", marginLeft + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("P.O. No.:", marginLeft + colWidth1 + 2, rowY + 4, { size: labelSize });
+  text(po.po_no || "-", marginLeft + colWidth1 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("Date:", marginLeft + colWidth1 + colWidth2 + 2, rowY + 4, { size: labelSize });
+  text(po.po_date || "-", marginLeft + colWidth1 + colWidth2 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  y += rowHeight;
+
+  // Row 2: Address | Mode of Procurement
+  rowY = y;
+  drawRect(marginLeft, rowY, colWidth1, rowHeight);
+  drawRect(marginLeft + colWidth1, rowY, colWidth2 + colWidth3, rowHeight);
+
+  text("Address:", marginLeft + 2, rowY + 4, { size: labelSize });
+  const addrText = supplier?.address || "-";
+  const addrLines = doc.splitTextToSize(addrText, colWidth1 - 4);
+  doc.setFontSize(valueSize);
+  doc.setFont("helvetica", "bold");
+  doc.text(addrLines.slice(0, 1), marginLeft + 2, rowY + 9);
+
+  text("Mode of Procurement:", marginLeft + colWidth1 + 2, rowY + 4, { size: labelSize });
+  text(modeProc?.description || "-", marginLeft + colWidth1 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  y += rowHeight;
+
+  // Row 3: TIN & Contact | Abstract No. | PR No.
+  rowY = y;
+  drawRect(marginLeft, rowY, colWidth1, rowHeight);
+  drawRect(marginLeft + colWidth1, rowY, colWidth2, rowHeight);
+  drawRect(marginLeft + colWidth1 + colWidth2, rowY, colWidth3, rowHeight);
+
+  text("TIN:", marginLeft + 2, rowY + 4, { size: labelSize });
+  text(supplier?.tin || "-", marginLeft + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("Contact:", marginLeft + 45, rowY + 4, { size: labelSize });
+  text(supplier?.contact || "-", marginLeft + 45, rowY + 9, { bold: true, size: valueSize });
+
+  text("Abstract No.:", marginLeft + colWidth1 + 2, rowY + 4, { size: labelSize });
+  text(abstract?.a_no || "-", marginLeft + colWidth1 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("PR No.:", marginLeft + colWidth1 + colWidth2 + 2, rowY + 4, { size: labelSize });
+  text(prNo || "-", marginLeft + colWidth1 + colWidth2 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  y += rowHeight;
+
+  // Row 4: Place of Delivery | Date of Delivery | Days to Deliver
+  rowY = y;
+  drawRect(marginLeft, rowY, colWidth1, rowHeight);
+  drawRect(marginLeft + colWidth1, rowY, colWidth2, rowHeight);
+  drawRect(marginLeft + colWidth1 + colWidth2, rowY, colWidth3, rowHeight);
+
+  text("Place of Delivery:", marginLeft + 2, rowY + 4, { size: labelSize });
+  text(po.place_of_delivery || "-", marginLeft + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("Date of Delivery:", marginLeft + colWidth1 + 2, rowY + 4, { size: labelSize });
+  text(po.date_of_delivery || "-", marginLeft + colWidth1 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("Days to Deliver:", marginLeft + colWidth1 + colWidth2 + 2, rowY + 4, { size: labelSize });
+  text(po.days_to_deliver != null ? String(po.days_to_deliver) : "-", marginLeft + colWidth1 + colWidth2 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  y += rowHeight;
+
+  // Row 5: Delivery Term | Payment Term
+  rowY = y;
+  drawRect(marginLeft, rowY, colWidth1, rowHeight);
+  drawRect(marginLeft + colWidth1, rowY, colWidth2 + colWidth3, rowHeight);
+
+  text("Delivery Term:", marginLeft + 2, rowY + 4, { size: labelSize });
+  text(deliveryTerm?.description || "-", marginLeft + 2, rowY + 9, { bold: true, size: valueSize });
+
+  text("Payment Term:", marginLeft + colWidth1 + 2, rowY + 4, { size: labelSize });
+  text(paymentTerm?.description || "-", marginLeft + colWidth1 + 2, rowY + 9, { bold: true, size: valueSize });
+
+  y += rowHeight + 4;
+
+  // ═══════════════════════════════════════════════════════════
+  // LINE ITEMS TABLE
+  // ═══════════════════════════════════════════════════════════
+
+  // Table column widths
+  const col = {
+    no: 10,
+    qty: 15,
+    unit: 15,
+    desc: 80,
+    unitCost: 30,
+    amount: 30,
+  };
+
+  // Table header
+  const tableHeaderHeight = 8;
+  let tableX = marginLeft;
+
+  drawRect(tableX, y, col.no, tableHeaderHeight, headerBg);
+  text("No.", tableX + col.no / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+  tableX += col.no;
+
+  drawRect(tableX, y, col.qty, tableHeaderHeight, headerBg);
+  text("QTY", tableX + col.qty / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+  tableX += col.qty;
+
+  drawRect(tableX, y, col.unit, tableHeaderHeight, headerBg);
+  text("UNIT", tableX + col.unit / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+  tableX += col.unit;
+
+  drawRect(tableX, y, col.desc, tableHeaderHeight, headerBg);
+  text("DESCRIPTION", tableX + col.desc / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+  tableX += col.desc;
+
+  drawRect(tableX, y, col.unitCost, tableHeaderHeight, headerBg);
+  text("UNIT COST", tableX + col.unitCost / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+  tableX += col.unitCost;
+
+  drawRect(tableX, y, col.amount, tableHeaderHeight, headerBg);
+  text("AMOUNT", tableX + col.amount / 2, y + 5.5, { align: "center", bold: true, size: 8 });
+
+  y += tableHeaderHeight;
+
+  // Table rows
+  lines.forEach((line, idx) => {
+    // Calculate row height based on description length
+    const specs = parseSpecEntries(line.specifications);
+    doc.setFontSize(8);
+    const descTextLines = doc.splitTextToSize(line.item_description, col.desc - 4);
+
+    let specHeight = 0;
+    if (specs.length > 0) {
+      doc.setFontSize(7);
+      specs.forEach((sp) => {
+        const specText = sp.value ? `${sp.label}: ${sp.value}` : sp.label;
+        const specLines = doc.splitTextToSize(specText, col.desc - 4);
+        specHeight += specLines.length * 3;
+      });
+    }
+
+    const minRowHeight = 8;
+    const textHeight = descTextLines.length * 3.5 + specHeight + 3;
+    const rowH = Math.max(minRowHeight, textHeight);
+
+    // Check for page break
+    if (y + rowH > pageHeight - 40) {
+      doc.addPage();
+      y = 15;
+    }
+
+    tableX = marginLeft;
+
+    // No.
+    drawRect(tableX, y, col.no, rowH);
+    text(String(idx + 1), tableX + col.no / 2, y + 5, { align: "center", size: 8 });
+    tableX += col.no;
+
+    // QTY
+    drawRect(tableX, y, col.qty, rowH);
+    text(String(line.qty), tableX + col.qty / 2, y + 5, { align: "center", size: 8 });
+    tableX += col.qty;
+
+    // UNIT
+    drawRect(tableX, y, col.unit, rowH);
+    text(line.unit_code.toUpperCase(), tableX + col.unit / 2, y + 5, { align: "center", size: 8 });
+    tableX += col.unit;
+
+    // DESCRIPTION
+    drawRect(tableX, y, col.desc, rowH);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text(descTextLines, tableX + 2, y + 4.5);
+
+    // Specs under description
+    if (specs.length > 0) {
+      let specY = y + 4.5 + descTextLines.length * 3.5;
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      specs.forEach((sp) => {
+        const specText = sp.value ? `${sp.label}: ${sp.value}` : sp.label;
+        const specLines = doc.splitTextToSize(specText, col.desc - 4);
+        doc.text(specLines, tableX + 2, specY);
+        specY += specLines.length * 3;
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+    tableX += col.desc;
+
+    // UNIT COST
+    drawRect(tableX, y, col.unitCost, rowH);
+    text(formatCurrency(line.unit_price), tableX + col.unitCost - 2, y + 5, { align: "right", size: 8 });
+    tableX += col.unitCost;
+
+    // AMOUNT
+    drawRect(tableX, y, col.amount, rowH);
+    text(formatCurrency(line.total_amount), tableX + col.amount - 2, y + 5, { align: "right", bold: true, size: 8 });
+
+    y += rowH;
+  });
+
+  // Subtotal row
+  const subtotal = lines.reduce((s, l) => s + l.total_amount, 0);
+  const subtotalRowHeight = 10;
+
+  tableX = marginLeft;
+  drawRect(tableX, y, col.no + col.qty + col.unit + col.desc + col.unitCost, subtotalRowHeight, headerBg);
+  text("TOTAL AMOUNT", marginLeft + col.no + col.qty + col.unit + col.desc + col.unitCost - 2, y + 6.5, { align: "right", bold: true, size: 9 });
+
+  tableX = marginLeft + col.no + col.qty + col.unit + col.desc + col.unitCost;
+  drawRect(tableX, y, col.amount, subtotalRowHeight, headerBg);
+  text(formatCurrency(subtotal), tableX + col.amount - 2, y + 6.5, { align: "right", bold: true, size: 10 });
+
+  y += subtotalRowHeight + 6;
+
+  // ═══════════════════════════════════════════════════════════
+  // REMARKS
+  // ═══════════════════════════════════════════════════════════
+
+  if (po.remarks) {
+    text("Remarks:", marginLeft, y, { bold: true, size: 9 });
+    y += 4;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const remarksLines = doc.splitTextToSize(po.remarks, contentWidth);
+    doc.text(remarksLines, marginLeft, y);
+    y += remarksLines.length * 4 + 6;
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SIGNATORIES
+  // ═══════════════════════════════════════════════════════════
+
+  // Ensure space for signatories
+  if (y > pageHeight - 50) {
+    doc.addPage();
+    y = 20;
+  } else {
+    y = Math.max(y + 10, pageHeight - 60);
+  }
+
+  const sigWidth = contentWidth / 2 - 10;
+
+  // Issued by
+  text("Issued by:", marginLeft, y, { size: 8 });
+  y += 15;
+  doc.setLineWidth(0.3);
+  doc.line(marginLeft, y, marginLeft + sigWidth, y);
+  y += 4;
+  text(po.issued_by || "", marginLeft + sigWidth / 2, y, { align: "center", bold: true, size: 9 });
+
+  // Received by (same line)
+  const rightColX = marginLeft + contentWidth / 2 + 10;
+  y -= 19;
+  text("Received by:", rightColX, y, { size: 8 });
+  y += 15;
+  doc.line(rightColX, y, rightColX + sigWidth, y);
+  y += 4;
+  text(po.received_by || "", rightColX + sigWidth / 2, y, { align: "center", bold: true, size: 9 });
+
+  // ═══════════════════════════════════════════════════════════
+  // SAVE
+  // ═══════════════════════════════════════════════════════════
+
+  doc.save(`PO_${po.po_no || po.po_id}.pdf`);
 };
 
 // ════════════════════════════════════════════════════════════
@@ -167,6 +538,22 @@ const PurchaseOrder = () => {
   // ───────────────────────────────────────────────
 
   const openForm = async (po?: PO) => {
+    // Ensure lookups are loaded
+    const [abs, sups, dts, pts, mps, prs] = await Promise.all([
+      awardedAbstracts.length ? Promise.resolve(awardedAbstracts) : fetchAwardedAbstracts(),
+      suppliers.length ? Promise.resolve(suppliers) : fetchSuppliers(),
+      deliveryTerms.length ? Promise.resolve(deliveryTerms) : fetchDeliveryTerms(),
+      paymentTerms.length ? Promise.resolve(paymentTerms) : fetchPaymentTerms(),
+      modes.length ? Promise.resolve(modes) : fetchModesProcurement(),
+      submittedPRs.length ? Promise.resolve(submittedPRs) : fetchSubmittedPRs(),
+    ]);
+    setAwardedAbstracts(abs);
+    setSuppliers(sups);
+    setDeliveryTerms(dts);
+    setPaymentTerms(pts);
+    setModes(mps);
+    setSubmittedPRs(prs);
+
     if (po) {
       setEditingPO(po);
       setPoNo(po.po_no || "");
@@ -183,27 +570,51 @@ const PurchaseOrder = () => {
       setIssuedBy(po.issued_by || "");
       setReceivedBy(po.received_by || "");
 
-      // Load saved PO lines and enrich with PR line data
-      const [savedLines, prLines] = await Promise.all([
-        fetchPOLines(po.po_id),
-        po.a_id ? fetchAbstractPRLines(po.a_id) : Promise.resolve([]),
-      ]);
+      // Load saved PO lines
+      const savedLines = await fetchPOLines(po.po_id);
 
-      const enriched: POLineRow[] = savedLines.map((sl) => {
-        const prl = prLines.find((l) => l.prl_id === sl.prl_id);
-        return {
-          b_id: sl.b_id,
-          prl_id: sl.prl_id,
-          item_description: prl?.item_description || "",
-          item_code: prl?.item_code || "",
-          unit_code: prl?.unit_code || "",
-          qty: sl.qty_ordered,
-          unit_price: sl.unit_price,
-          total_amount: sl.pol_total_amount,
-          specifications: prl?.specifications || null,
-        };
-      });
-      setPoLines(enriched);
+      // Find the abstract to get PR lines
+      const abstract = abs.find((a) => a.a_id === po.a_id);
+      const prLines = abstract ? await fetchPRLinesForAbstract(abstract.pr_id) : [];
+
+      if (savedLines.length > 0) {
+        // Enrich saved lines with PR line data
+        const enriched: POLineRow[] = savedLines.map((sl) => {
+          const prl = prLines.find((l) => l.prl_id === sl.prl_id);
+          return {
+            b_id: sl.b_id,
+            prl_id: sl.prl_id,
+            item_description: prl?.item_description || "",
+            item_code: prl?.item_code || "",
+            unit_code: prl?.unit_code || "",
+            qty: sl.qty_ordered,
+            unit_price: sl.unit_price,
+            total_amount: sl.pol_total_amount,
+            specifications: prl?.specifications || null,
+          };
+        });
+        setPoLines(enriched);
+      } else if (po.a_id) {
+        // No saved lines - fetch winning bidtures from abstract
+        const winBids = await fetchWinningBidtures(po.a_id);
+        const lines: POLineRow[] = winBids.map((bid) => {
+          const prl = prLines.find((l) => l.prl_id === bid.prl_id);
+          return {
+            b_id: bid.b_id,
+            prl_id: bid.prl_id,
+            item_description: prl?.item_description || "",
+            item_code: prl?.item_code || "",
+            unit_code: prl?.unit_code || "",
+            qty: prl?.qty || 0,
+            unit_price: bid.unit_price_bid,
+            total_amount: bid.unit_total_amount_bid,
+            specifications: prl?.specifications || null,
+          };
+        });
+        setPoLines(lines);
+      } else {
+        setPoLines([]);
+      }
     } else {
       setEditingPO(null);
       const nextNo = await generateNextPONumber();
@@ -229,15 +640,6 @@ const PurchaseOrder = () => {
     setEditingPO(null);
     setFormError("");
     loadList();
-  };
-
-  // Helper: fetch PR lines through the abstract's pr_id
-  const fetchAbstractPRLines = async (
-    abstractId: string,
-  ): Promise<PurchaseRequestLine[]> => {
-    const abs = awardedAbstracts.find((a) => a.a_id === abstractId);
-    if (!abs) return [];
-    return fetchPRLinesForAbstract(abs.pr_id);
   };
 
   // ───────────────────────────────────────────────
@@ -479,20 +881,56 @@ const PurchaseOrder = () => {
                 </button>
                 {editingPO && editingPO.status === "DRAFT" && (
                   <button
-                    onClick={() => handleSave("APPROVED")}
+                    onClick={() => handleSave("ISSUED")}
                     disabled={isSaving}
                     className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
                     <Send className="w-4 h-4" />
-                    Approve PO
+                    Issue PO
                   </button>
                 )}
               </>
             )}
             {isReadOnly && (
-              <span className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm font-medium border border-gray-300">
-                Read-only — {editingPO!.status}
-              </span>
+              <>
+                {editingPO!.status === "ISSUED" && (
+                  <button
+                    onClick={() => handleSave("RECEIVED")}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Mark as Received
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    const selectedAbstract = awardedAbstracts.find((a) => a.a_id === aId);
+                    const winSupplier = aId ? supplierForAbstract(aId) : null;
+                    const deliveryTerm = deliveryTerms.find((d) => d.dt_id === dtId);
+                    const paymentTerm = paymentTerms.find((p) => p.pt_id === ptId);
+                    const mode = selectedAbstract ? modes.find((m) => m.mp_id === selectedAbstract.mp_id) : null;
+                    const prNo = aId ? prLabel(aId) : "";
+                    generatePOPDF(
+                      editingPO!,
+                      poLines,
+                      winSupplier,
+                      selectedAbstract || null,
+                      deliveryTerm || null,
+                      paymentTerm || null,
+                      mode || null,
+                      prNo,
+                    );
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download PDF
+                </button>
+                <span className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg text-sm font-medium border border-gray-300">
+                  Status: {editingPO!.status}
+                </span>
+              </>
             )}
           </div>
         </div>
@@ -923,9 +1361,14 @@ const PurchaseOrder = () => {
           color="default"
         />
         <StatCard
-          label="Approved"
-          value={orders.filter((o) => o.status === "APPROVED").length}
+          label="Issued"
+          value={orders.filter((o) => o.status === "ISSUED").length}
           color="success"
+        />
+        <StatCard
+          label="Received"
+          value={orders.filter((o) => o.status === "RECEIVED").length}
+          color="primary"
         />
         <StatCard
           label="Cancelled"
@@ -938,7 +1381,8 @@ const PurchaseOrder = () => {
         tabs={[
           { id: "all", label: "All" },
           { id: "DRAFT", label: "Draft" },
-          { id: "APPROVED", label: "Approved" },
+          { id: "ISSUED", label: "Issued" },
+          { id: "RECEIVED", label: "Received" },
           { id: "CANCELLED", label: "Cancelled" },
         ]}
         activeTab={activeTab}

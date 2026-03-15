@@ -13,6 +13,11 @@ import type {
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderFormData,
+  DeliveryReceipt,
+  DeliveryReceiptLine,
+  DeliveryReceiptFormData,
+  WorkflowLog,
+  ProcurementDashboardStats,
 } from "@/types/gse.types";
 
 // ────────────────────────────────────────────────────────────
@@ -111,17 +116,19 @@ export const createPaymentTerm = async (
   return { success: true, pt_id: data.pt_id };
 };
 
-/** Fetch SUBMITTED PRs that can be linked to an abstract */
+/** Fetch APPROVED PRs that can be linked to an abstract */
 export const fetchSubmittedPRs = async (): Promise<PurchaseRequest[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema("gse")
     .from("purchase_request")
-    .select("pr_id, pr_no, pr_date, rc_id, purpose, pr_total_amount, status")
-    .in("status", ["SUBMITTED", "APPROVED"])
+    .select(
+      "pr_id, pr_no, pr_date, rc_id, rcs_id, purpose, pr_total_amount, status",
+    )
+    .eq("status", "APPROVED")
     .order("pr_no", { ascending: false });
   if (error) {
-    console.error("Error fetching submitted PRs:", error);
+    console.error("Error fetching approved PRs:", error);
     return [];
   }
   return (data || []).map((r: any) => ({
@@ -627,4 +634,764 @@ export const generateNextPONumber = async (): Promise<string> => {
   }
 
   return `${prefix}${String(nextNum).padStart(4, "0")}`;
+};
+
+// ────────────────────────────────────────────────────────────
+// PR LINE SPECIFICATIONS — UPDATE (for Abstract editing)
+// ────────────────────────────────────────────────────────────
+
+/** Update specifications for a PR line item */
+export const updatePRLineSpecifications = async (
+  prlId: string,
+  specifications: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("purchase_request_list")
+    .update({ specifications })
+    .eq("prl_id", prlId);
+  if (error) {
+    console.error("Error updating PR line specifications:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+};
+
+// ────────────────────────────────────────────────────────────
+// PR BUDGET TRACKING — Calculate remaining budget from abstracts
+// ────────────────────────────────────────────────────────────
+
+/** Get total awarded (consumed) amount for a PR from all awarded abstracts */
+export const getPRConsumedAmount = async (prId: string): Promise<number> => {
+  if (!isSupabaseConfigured() || !supabase) return 0;
+
+  // Get all abstracts for this PR that have a winner
+  const { data: abstracts, error } = await (
+    supabase as NonNullable<typeof supabase>
+  )
+    .schema("bac")
+    .from("abstract")
+    .select("a_id, winning_b_id")
+    .eq("pr_id", prId)
+    .not("winning_b_id", "is", null);
+
+  if (error || !abstracts || abstracts.length === 0) return 0;
+
+  // Sum up the winning bidture amounts for each abstract
+  let totalConsumed = 0;
+  for (const abs of abstracts) {
+    const { data: bidtures } = await (supabase as NonNullable<typeof supabase>)
+      .schema("bac")
+      .from("bidture")
+      .select("unit_total_amount_bid")
+      .eq("a_id", abs.a_id)
+      .eq("winner_status", true);
+
+    if (bidtures) {
+      for (const b of bidtures) {
+        totalConsumed += b.unit_total_amount_bid || 0;
+      }
+    }
+  }
+
+  return totalConsumed;
+};
+
+/** Get remaining budget for a PR (approved budget - consumed from abstracts) */
+export const getPRRemainingBudget = async (
+  prId: string,
+  approvedBudget: number,
+): Promise<number> => {
+  const consumed = await getPRConsumedAmount(prId);
+  return Math.max(0, approvedBudget - consumed);
+};
+
+/** Get PR IDs that already have at least one winner-declared abstract */
+export const getPRsWithWinnerDeclared = async (): Promise<string[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("abstract")
+    .select("pr_id")
+    .not("winning_b_id", "is", null);
+
+  if (error) {
+    console.error("Error fetching PRs with declared winners:", error);
+    return [];
+  }
+
+  // Return unique PR IDs
+  const prIds = [...new Set((data || []).map((row) => row.pr_id))];
+  return prIds;
+};
+
+/** Fetch APPROVED PRs that have remaining budget (not fully consumed by abstracts) */
+export const fetchPRsWithRemainingBudget = async (
+  rcId?: string,
+  rcsId?: string,
+): Promise<
+  Array<PurchaseRequest & { consumed_amount: number; remaining_budget: number }>
+> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  // First get all approved PRs
+  let query = (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("purchase_request")
+    .select(
+      "pr_id, pr_no, pr_date, rc_id, rcs_id, purpose, pr_total_amount, status",
+    )
+    .eq("status", "APPROVED");
+
+  if (rcId) {
+    query = query.eq("rc_id", rcId);
+  }
+  if (rcsId) {
+    query = query.eq("rcs_id", rcsId);
+  }
+
+  const { data, error } = await query.order("pr_no", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching approved PRs:", error);
+    return [];
+  }
+
+  // Calculate remaining budget for each PR
+  const result: Array<
+    PurchaseRequest & { consumed_amount: number; remaining_budget: number }
+  > = [];
+
+  for (const pr of data || []) {
+    const consumed = await getPRConsumedAmount(pr.pr_id);
+    const remaining = Math.max(0, (pr.pr_total_amount || 0) - consumed);
+
+    // Only include PRs that have remaining budget
+    if (remaining > 0) {
+      result.push({
+        ...pr,
+        id: pr.pr_id,
+        consumed_amount: consumed,
+        remaining_budget: remaining,
+      } as PurchaseRequest & {
+        consumed_amount: number;
+        remaining_budget: number;
+      });
+    }
+  }
+
+  return result;
+};
+
+// ────────────────────────────────────────────────────────────
+// DELIVERY RECEIPT
+// ────────────────────────────────────────────────────────────
+
+export const fetchDeliveryReceipts = async (): Promise<DeliveryReceipt[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .select("*")
+    .order("dr_date", { ascending: false });
+  if (error) {
+    console.error("Error fetching delivery receipts:", error);
+    return [];
+  }
+  return data || [];
+};
+
+export const fetchDeliveryReceiptsByPO = async (
+  poId: string,
+): Promise<DeliveryReceipt[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .select("*")
+    .eq("po_id", poId)
+    .order("dr_date", { ascending: false });
+  if (error) {
+    console.error("Error fetching delivery receipts for PO:", error);
+    return [];
+  }
+  return data || [];
+};
+
+export const fetchDeliveryReceiptLines = async (
+  drId: string,
+): Promise<DeliveryReceiptLine[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt_line")
+    .select("*")
+    .eq("dr_id", drId);
+  if (error) {
+    console.error("Error fetching delivery receipt lines:", error);
+    return [];
+  }
+  return data || [];
+};
+
+export const generateNextDRNumber = async (): Promise<string> => {
+  const year = new Date().getFullYear();
+  const prefix = `DR-${year}-`;
+
+  if (!isSupabaseConfigured() || !supabase) return `${prefix}0001`;
+
+  const { data } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .select("dr_no")
+    .like("dr_no", `${prefix}%`)
+    .order("dr_no", { ascending: false })
+    .limit(1);
+
+  let nextNum = 1;
+  if (data && data.length > 0 && data[0].dr_no) {
+    const lastNum = parseInt(data[0].dr_no.replace(prefix, ""), 10);
+    if (!isNaN(lastNum)) nextNum = lastNum + 1;
+  }
+
+  return `${prefix}${String(nextNum).padStart(4, "0")}`;
+};
+
+export const createDeliveryReceipt = async (
+  formData: DeliveryReceiptFormData,
+): Promise<{ success: boolean; dr_id?: string; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .insert(formData)
+    .select("dr_id")
+    .single();
+  if (error) return { success: false, error: error.message };
+  return { success: true, dr_id: data.dr_id };
+};
+
+export const updateDeliveryReceipt = async (
+  drId: string,
+  formData: Partial<DeliveryReceiptFormData>,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .update({ ...formData, updated_at: new Date().toISOString() })
+    .eq("dr_id", drId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const deleteDeliveryReceipt = async (
+  drId: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt")
+    .delete()
+    .eq("dr_id", drId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const upsertDeliveryReceiptLines = async (
+  lines: Array<{
+    dr_id: string;
+    pol_id: string;
+    qty_delivered: number;
+    qty_accepted: number;
+    qty_rejected?: number;
+    rejection_reason?: string;
+    inspection_notes?: string;
+  }>,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt_line")
+    .upsert(lines, { onConflict: "drl_id" });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+export const deleteDeliveryReceiptLinesByDR = async (
+  drId: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("delivery_receipt_line")
+    .delete()
+    .eq("dr_id", drId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+// Update PO line delivery tracking
+export const updatePOLineDelivery = async (
+  polId: string,
+  qtyDelivered: number,
+  deliveryStatus: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("purchase_order_list")
+    .update({
+      qty_delivered: qtyDelivered,
+      delivery_status: deliveryStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("pol_id", polId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+};
+
+// ────────────────────────────────────────────────────────────
+// WORKFLOW LOG
+// ────────────────────────────────────────────────────────────
+
+export const logWorkflowChange = async (
+  entityType: "PR" | "ABSTRACT" | "PO" | "DR",
+  entityId: string,
+  entityNo: string,
+  fromStatus: string | null,
+  toStatus: string,
+  changedBy?: string,
+  remarks?: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("workflow_log")
+    .insert({
+      entity_type: entityType,
+      entity_id: entityId,
+      entity_no: entityNo,
+      from_status: fromStatus,
+      to_status: toStatus,
+      changed_by: changedBy,
+      remarks,
+    });
+  if (error) {
+    console.error("Error logging workflow change:", error);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+};
+
+export const fetchWorkflowLogs = async (
+  entityType?: string,
+  entityId?: string,
+): Promise<WorkflowLog[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  let query = (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("workflow_log")
+    .select("*")
+    .order("changed_at", { ascending: false })
+    .limit(100);
+
+  if (entityType) query = query.eq("entity_type", entityType);
+  if (entityId) query = query.eq("entity_id", entityId);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error("Error fetching workflow logs:", error);
+    return [];
+  }
+  return data || [];
+};
+
+// ────────────────────────────────────────────────────────────
+// PROCUREMENT DASHBOARD
+// ────────────────────────────────────────────────────────────
+
+export const fetchProcurementDashboardStats =
+  async (): Promise<ProcurementDashboardStats | null> => {
+    if (!isSupabaseConfigured() || !supabase) return null;
+
+    // Fetch stats in parallel
+    const [prStats, absStats, poStats, drStats] = await Promise.all([
+      // PR Stats
+      (supabase as NonNullable<typeof supabase>)
+        .schema("gse")
+        .from("purchase_request")
+        .select("status, pr_total_amount"),
+      // Abstract Stats
+      (supabase as NonNullable<typeof supabase>)
+        .schema("bac")
+        .from("abstract")
+        .select("status"),
+      // PO Stats
+      (supabase as NonNullable<typeof supabase>)
+        .schema("bac")
+        .from("purchase_order")
+        .select("status, po_total_amount"),
+      // DR Stats
+      (supabase as NonNullable<typeof supabase>)
+        .schema("bac")
+        .from("delivery_receipt")
+        .select("status"),
+    ]);
+
+    const prData = prStats.data || [];
+    const absData = absStats.data || [];
+    const poData = poStats.data || [];
+    const drData = drStats.data || [];
+
+    return {
+      pr_draft: prData.filter((p) => p.status === "DRAFT").length,
+      pr_pending: prData.filter((p) => p.status === "SUBMITTED").length,
+      pr_approved: prData.filter((p) => p.status === "APPROVED").length,
+      pr_rejected: prData.filter((p) => p.status === "REJECTED").length,
+      pr_total_approved_amount: prData
+        .filter((p) => p.status === "APPROVED")
+        .reduce((sum, p) => sum + (p.pr_total_amount || 0), 0),
+      abs_draft: absData.filter((a) => a.status === "DRAFT").length,
+      abs_evaluated: absData.filter((a) => a.status === "EVALUATED").length,
+      abs_awarded: absData.filter((a) => a.status === "AWARDED").length,
+      po_draft: poData.filter((p) => p.status === "DRAFT").length,
+      po_issued: poData.filter((p) => p.status === "ISSUED").length,
+      po_received: poData.filter((p) => p.status === "RECEIVED").length,
+      po_total_issued_amount: poData
+        .filter((p) => p.status === "ISSUED")
+        .reduce((sum, p) => sum + (p.po_total_amount || 0), 0),
+      po_total_received_amount: poData
+        .filter((p) => p.status === "RECEIVED")
+        .reduce((sum, p) => sum + (p.po_total_amount || 0), 0),
+      dr_draft: drData.filter((d) => d.status === "DRAFT").length,
+      dr_accepted: drData.filter((d) => d.status === "ACCEPTED").length,
+    };
+  };
+
+// ────────────────────────────────────────────────────────────
+// AUTO-CREATE PO DRAFT WHEN ABSTRACT IS AWARDED
+// ────────────────────────────────────────────────────────────
+
+export const autoCreatePOFromAbstract = async (
+  abstractId: string,
+): Promise<{ success: boolean; po_id?: string; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase)
+    return { success: false, error: "Supabase is not configured" };
+
+  // Check if PO already exists for this abstract
+  const { data: existingPO } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("purchase_order")
+    .select("po_id")
+    .eq("a_id", abstractId)
+    .maybeSingle();
+
+  if (existingPO) {
+    return { success: true, po_id: existingPO.po_id };
+  }
+
+  // Fetch abstract details
+  const { data: abstract } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("abstract")
+    .select("*")
+    .eq("a_id", abstractId)
+    .single();
+
+  if (!abstract) {
+    return { success: false, error: "Abstract not found" };
+  }
+
+  // Generate PO number
+  const poNo = await generateNextPONumber();
+
+  // Create PO draft
+  const result = await createPurchaseOrder({
+    po_no: poNo,
+    po_date: new Date().toISOString().slice(0, 10),
+    a_id: abstractId,
+    dt_id: abstract.dt_id,
+    pt_id: abstract.pt_id,
+    status: "DRAFT",
+  });
+
+  if (!result.success || !result.po_id) {
+    return result;
+  }
+
+  // Fetch winning bidtures and create PO lines
+  const winningBids = await fetchWinningBidtures(abstractId);
+  const prLines = await fetchPRLinesForAbstract(abstract.pr_id);
+
+  const poLines = winningBids.map((bid) => {
+    const prl = prLines.find((l) => l.prl_id === bid.prl_id);
+    return {
+      po_id: result.po_id!,
+      b_id: bid.b_id,
+      prl_id: bid.prl_id,
+      qty_ordered: prl?.qty || 1,
+      unit_price: bid.unit_price_bid,
+      pol_total_amount: bid.unit_total_amount_bid,
+    };
+  });
+
+  if (poLines.length > 0) {
+    await upsertPOLines(poLines);
+  }
+
+  // Update PO total
+  const total = poLines.reduce((sum, l) => sum + l.pol_total_amount, 0);
+  await updatePurchaseOrder(result.po_id!, { po_total_amount: total });
+
+  return result;
+};
+
+// ────────────────────────────────────────────────────────────
+// ISSUED POs FOR DELIVERY RECEIPT
+// ────────────────────────────────────────────────────────────
+
+export const fetchIssuedPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("bac")
+    .from("purchase_order")
+    .select("*")
+    .in("status", ["ISSUED", "RECEIVED"])
+    .order("po_date", { ascending: false });
+  if (error) {
+    console.error("Error fetching issued POs:", error);
+    return [];
+  }
+  return data || [];
+};
+
+// Fetch PO lines with delivery status
+export const fetchPOLinesWithDelivery = async (
+  poId: string,
+): Promise<
+  Array<
+    PurchaseOrderLine & {
+      pending_qty: number;
+      item_description: string;
+      item_code: string;
+      unit_code: string;
+    }
+  >
+> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  // Step 1: fetch PO lines from bac schema
+  const { data: polData, error: polError } = await (
+    supabase as NonNullable<typeof supabase>
+  )
+    .schema("bac")
+    .from("purchase_order_list")
+    .select("*")
+    .eq("po_id", poId);
+
+  if (polError) {
+    console.error("Error fetching PO lines with delivery:", polError);
+    return [];
+  }
+
+  const poLines = polData || [];
+  const prlIds = poLines
+    .map((l) => l.prl_id)
+    .filter((id): id is string => !!id);
+
+  // Step 2: fetch PR line details from gse schema
+  const prlMap: Record<
+    string,
+    { item_description: string; item_code: string; unit_code: string }
+  > = {};
+
+  if (prlIds.length > 0) {
+    const { data: prlData, error: prlError } = await (
+      supabase as NonNullable<typeof supabase>
+    )
+      .schema("gse")
+      .from("purchase_request_list")
+      .select(
+        `prl_id,
+         items:i_id ( i_code, description ),
+         unit:u_id ( u_code )`,
+      )
+      .in("prl_id", prlIds);
+
+    if (prlError) {
+      console.error("Error fetching PR line details for DR:", prlError);
+    }
+
+    for (const row of prlData || []) {
+      const item = Array.isArray((row as any).items)
+        ? (row as any).items[0]
+        : (row as any).items;
+      const unit = Array.isArray((row as any).unit)
+        ? (row as any).unit[0]
+        : (row as any).unit;
+      prlMap[(row as any).prl_id] = {
+        item_description: item?.description ?? "",
+        item_code: item?.i_code ?? "",
+        unit_code: unit?.u_code ?? "",
+      };
+    }
+  }
+
+  return poLines.map((line) => ({
+    ...line,
+    pending_qty: Math.max(
+      0,
+      (line.qty_ordered || 0) - (line.qty_delivered || 0),
+    ),
+    item_description: prlMap[line.prl_id]?.item_description ?? "",
+    item_code: prlMap[line.prl_id]?.item_code ?? "",
+    unit_code: prlMap[line.prl_id]?.unit_code ?? "",
+  }));
+};
+
+// Fetch PO lines for DR — auto-creates PO lines from winning bidtures if none exist
+export const fetchPOLinesForDR = async (
+  poId: string,
+  aId?: string | null,
+): Promise<
+  Array<
+    PurchaseOrderLine & {
+      pending_qty: number;
+      item_description: string;
+      item_code: string;
+      unit_code: string;
+    }
+  >
+> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  // Step 1: fetch existing PO lines
+  const { data: polData, error: polError } = await (
+    supabase as NonNullable<typeof supabase>
+  )
+    .schema("bac")
+    .from("purchase_order_list")
+    .select("*")
+    .eq("po_id", poId);
+
+  if (polError) {
+    console.error("Error fetching PO lines for DR:", polError);
+    return [];
+  }
+
+  let poLines = polData || [];
+
+  // Step 2: if no saved lines and we have an abstract, create them from winning bidtures
+  if (poLines.length === 0 && aId) {
+    const { data: abstractData } = await (
+      supabase as NonNullable<typeof supabase>
+    )
+      .schema("bac")
+      .from("abstract")
+      .select("pr_id")
+      .eq("a_id", aId)
+      .single();
+
+    if (abstractData?.pr_id) {
+      const [winBids, prLinesData] = await Promise.all([
+        fetchWinningBidtures(aId),
+        fetchPRLinesForAbstract(abstractData.pr_id),
+      ]);
+
+      if (winBids.length > 0) {
+        const newLines = winBids.map((bid) => {
+          const prl = prLinesData.find((l) => l.prl_id === bid.prl_id);
+          return {
+            po_id: poId,
+            b_id: bid.b_id,
+            prl_id: bid.prl_id,
+            qty_ordered: prl?.qty || 1,
+            unit_price: bid.unit_price_bid,
+            pol_total_amount: bid.unit_total_amount_bid,
+          };
+        });
+
+        // Silently attempt insert — ignore errors (may already exist or constraint)
+        await (supabase as NonNullable<typeof supabase>)
+          .schema("bac")
+          .from("purchase_order_list")
+          .insert(newLines);
+
+        // Always re-fetch regardless of insert result
+        const { data: refetched } = await (
+          supabase as NonNullable<typeof supabase>
+        )
+          .schema("bac")
+          .from("purchase_order_list")
+          .select("*")
+          .eq("po_id", poId);
+        poLines = refetched || [];
+      }
+    }
+  }
+
+  // Step 3: enrich with PR line details from gse schema
+  const prlIds = poLines
+    .map((l) => l.prl_id)
+    .filter((id): id is string => !!id);
+
+  const prlMap: Record<
+    string,
+    { item_description: string; item_code: string; unit_code: string }
+  > = {};
+
+  if (prlIds.length > 0) {
+    const { data: prlData, error: prlError } = await (
+      supabase as NonNullable<typeof supabase>
+    )
+      .schema("gse")
+      .from("purchase_request_list")
+      .select(
+        `prl_id,
+         items:i_id ( i_code, description ),
+         unit:u_id ( u_code )`,
+      )
+      .in("prl_id", prlIds);
+
+    if (prlError) {
+      console.error("Error fetching PR line details for DR:", prlError);
+    }
+
+    for (const row of prlData || []) {
+      const item = Array.isArray((row as any).items)
+        ? (row as any).items[0]
+        : (row as any).items;
+      const unit = Array.isArray((row as any).unit)
+        ? (row as any).unit[0]
+        : (row as any).unit;
+      prlMap[(row as any).prl_id] = {
+        item_description: item?.description ?? "",
+        item_code: item?.i_code ?? "",
+        unit_code: unit?.u_code ?? "",
+      };
+    }
+  }
+
+  return poLines.map((line) => ({
+    ...line,
+    pending_qty: Math.max(
+      0,
+      (line.qty_ordered || 0) - (line.qty_delivered || 0),
+    ),
+    item_description: prlMap[line.prl_id]?.item_description ?? "",
+    item_code: prlMap[line.prl_id]?.item_code ?? "",
+    unit_code: prlMap[line.prl_id]?.unit_code ?? "",
+  }));
 };

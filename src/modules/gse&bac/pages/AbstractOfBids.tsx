@@ -46,9 +46,20 @@ import {
   createModeProcurement,
   createDeliveryTerm,
   createPaymentTerm,
+  updatePRLineSpecifications,
+  getPRConsumedAmount,
+  getPRsWithWinnerDeclared,
 } from "@/services/bacService";
-import { fetchResponsibilityCenters } from "@/services/gseService";
-import type { ResponsibilityCenter } from "@/types/gse.types";
+import {
+  fetchResponsibilityCenters,
+  fetchSections,
+  fetchPurchaseRequests,
+} from "@/services/gseService";
+import type {
+  ResponsibilityCenter,
+  ResponsibilityCenterSection,
+} from "@/types/gse.types";
+import jsPDF from "jspdf";
 
 // ────────────────────────────────────────────────────────────
 // HELPERS & TYPES
@@ -71,6 +82,13 @@ type SupplierColumn = {
   tin: string;
 };
 
+/** Editable spec entry */
+type EditableSpec = {
+  id: string;
+  label: string;
+  value: string;
+};
+
 const peso = (n: number) =>
   n.toLocaleString("en-PH", { minimumFractionDigits: 2 });
 
@@ -86,6 +104,339 @@ const parseSpecEntries = (
       return [{ label: specifications.trim(), value: "" }];
   }
   return [];
+};
+
+const formatCurrency = (n: number) =>
+  "P " +
+  n.toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+// ────────────────────────────────────────────────────────────
+// PDF GENERATION FOR ABSTRACT OF BIDS
+// ────────────────────────────────────────────────────────────
+
+const generateAbstractPDF = (
+  abstract: Abstract,
+  prLines: PurchaseRequestLine[],
+  supplierColumns: SupplierColumn[],
+  bidsData: Record<string, Record<string, BidCell>>,
+  winnerColId: string | null,
+  prNo: string,
+  modeDescription: string,
+) => {
+  // Use landscape for bid comparison
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = 297;
+  const pageHeight = 210;
+  const marginLeft = 10;
+  const marginRight = 10;
+  let y = 12;
+
+  const headerBg: [number, number, number] = [240, 240, 240];
+  const winnerBg: [number, number, number] = [220, 255, 220];
+  const borderColor: [number, number, number] = [0, 0, 0];
+
+  const drawRect = (
+    x: number,
+    yPos: number,
+    w: number,
+    h: number,
+    fill?: [number, number, number],
+  ) => {
+    if (fill) {
+      doc.setFillColor(fill[0], fill[1], fill[2]);
+      doc.rect(x, yPos, w, h, "F");
+    }
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.setLineWidth(0.2);
+    doc.rect(x, yPos, w, h, "S");
+  };
+
+  const text = (
+    str: string,
+    x: number,
+    yPos: number,
+    options?: {
+      align?: "left" | "center" | "right";
+      bold?: boolean;
+      size?: number;
+    },
+  ) => {
+    const align = options?.align || "left";
+    const bold = options?.bold || false;
+    const size = options?.size || 8;
+
+    doc.setFontSize(size);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+
+    if (align === "center") {
+      const textWidth = doc.getTextWidth(str);
+      doc.text(str, x - textWidth / 2, yPos);
+    } else if (align === "right") {
+      const textWidth = doc.getTextWidth(str);
+      doc.text(str, x - textWidth, yPos);
+    } else {
+      doc.text(str, x, yPos);
+    }
+  };
+
+  // Title
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.text("ABSTRACT OF BIDS", pageWidth / 2, y, { align: "center" });
+  y += 6;
+
+  // Header info row
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Abstract No: ${abstract.a_no || "-"}`, marginLeft, y);
+  doc.text(`Date: ${abstract.a_date || "-"}`, marginLeft + 70, y);
+  doc.text(`PR No: ${prNo || "-"}`, marginLeft + 130, y);
+  doc.text(`Mode: ${modeDescription || "-"}`, marginLeft + 190, y);
+  y += 6;
+
+  // Calculate column widths
+  const numSuppliers = Math.min(supplierColumns.length, 4); // Max 4 suppliers per page
+  const itemNoW = 8;
+  const qtyW = 12;
+  const unitW = 12;
+  const descW = 60;
+  const abcW = 25; // Approved Budget Cost
+  const supplierColW =
+    numSuppliers > 0
+      ? (pageWidth -
+          marginLeft -
+          marginRight -
+          itemNoW -
+          qtyW -
+          unitW -
+          descW -
+          abcW) /
+        numSuppliers
+      : 40;
+
+  // Table header row 1 - Supplier names
+  let tableX = marginLeft;
+  const headerH1 = 10;
+
+  drawRect(tableX, y, itemNoW, headerH1, headerBg);
+  text("Item", tableX + itemNoW / 2, y + 4, {
+    align: "center",
+    bold: true,
+    size: 6,
+  });
+  text("No.", tableX + itemNoW / 2, y + 7, {
+    align: "center",
+    bold: true,
+    size: 6,
+  });
+  tableX += itemNoW;
+
+  drawRect(tableX, y, qtyW, headerH1, headerBg);
+  text("Qty", tableX + qtyW / 2, y + 5.5, {
+    align: "center",
+    bold: true,
+    size: 6,
+  });
+  tableX += qtyW;
+
+  drawRect(tableX, y, unitW, headerH1, headerBg);
+  text("Unit", tableX + unitW / 2, y + 5.5, {
+    align: "center",
+    bold: true,
+    size: 6,
+  });
+  tableX += unitW;
+
+  drawRect(tableX, y, descW, headerH1, headerBg);
+  text("Description", tableX + descW / 2, y + 5.5, {
+    align: "center",
+    bold: true,
+    size: 7,
+  });
+  tableX += descW;
+
+  drawRect(tableX, y, abcW, headerH1, headerBg);
+  text("ABC", tableX + abcW / 2, y + 4, {
+    align: "center",
+    bold: true,
+    size: 6,
+  });
+  text("(Est.)", tableX + abcW / 2, y + 7, {
+    align: "center",
+    bold: true,
+    size: 5,
+  });
+  tableX += abcW;
+
+  // Supplier columns
+  supplierColumns.slice(0, numSuppliers).forEach((sup) => {
+    const isWinner = sup.localId === winnerColId;
+    drawRect(tableX, y, supplierColW, headerH1, isWinner ? winnerBg : headerBg);
+    const nameLines = doc.splitTextToSize(sup.name, supplierColW - 2);
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "bold");
+    doc.text(nameLines.slice(0, 2), tableX + supplierColW / 2, y + 4, {
+      align: "center",
+    });
+    if (isWinner) {
+      doc.setFontSize(5);
+      doc.setTextColor(0, 128, 0);
+      doc.text("(WINNER)", tableX + supplierColW / 2, y + 9, {
+        align: "center",
+      });
+      doc.setTextColor(0, 0, 0);
+    }
+    tableX += supplierColW;
+  });
+
+  y += headerH1;
+
+  // Table rows
+  prLines.forEach((line, idx) => {
+    const rowH = 7;
+
+    if (y + rowH > pageHeight - 20) {
+      doc.addPage();
+      y = 12;
+    }
+
+    tableX = marginLeft;
+
+    // Item No
+    drawRect(tableX, y, itemNoW, rowH);
+    text(String(idx + 1), tableX + itemNoW / 2, y + 4.5, {
+      align: "center",
+      size: 7,
+    });
+    tableX += itemNoW;
+
+    // Qty
+    drawRect(tableX, y, qtyW, rowH);
+    text(String(line.qty || 0), tableX + qtyW / 2, y + 4.5, {
+      align: "center",
+      size: 7,
+    });
+    tableX += qtyW;
+
+    // Unit
+    drawRect(tableX, y, unitW, rowH);
+    text(line.unit_code || "", tableX + unitW / 2, y + 4.5, {
+      align: "center",
+      size: 7,
+    });
+    tableX += unitW;
+
+    // Description
+    drawRect(tableX, y, descW, rowH);
+    doc.setFontSize(6);
+    doc.setFont("helvetica", "normal");
+    const descLines = doc.splitTextToSize(
+      line.item_description || "",
+      descW - 2,
+    );
+    doc.text(descLines.slice(0, 2), tableX + 1, y + 3);
+    tableX += descW;
+
+    // ABC (Estimated)
+    drawRect(tableX, y, abcW, rowH);
+    text(
+      formatCurrency(line.prl_total_amount_estimated || 0),
+      tableX + abcW - 1,
+      y + 4.5,
+      { align: "right", size: 6 },
+    );
+    tableX += abcW;
+
+    // Supplier bids
+    supplierColumns.slice(0, numSuppliers).forEach((sup) => {
+      const isWinner = sup.localId === winnerColId;
+      const bid = bidsData[sup.localId]?.[line.prl_id];
+      const bidPrice = parseFloat(bid?.unitPriceBid || "0") || 0;
+      const bidTotal = bidPrice * (line.qty || 0);
+
+      drawRect(tableX, y, supplierColW, rowH, isWinner ? winnerBg : undefined);
+      if (bidPrice > 0) {
+        text(formatCurrency(bidTotal), tableX + supplierColW - 1, y + 4.5, {
+          align: "right",
+          size: 6,
+        });
+      }
+      tableX += supplierColW;
+    });
+
+    y += rowH;
+  });
+
+  // Total row
+  const totalRowH = 8;
+  const totalABC = prLines.reduce(
+    (sum, l) => sum + (l.prl_total_amount_estimated || 0),
+    0,
+  );
+
+  tableX = marginLeft;
+  drawRect(tableX, y, itemNoW + qtyW + unitW + descW, totalRowH, headerBg);
+  text("TOTAL", marginLeft + itemNoW + qtyW + unitW + descW - 2, y + 5, {
+    align: "right",
+    bold: true,
+    size: 7,
+  });
+  tableX += itemNoW + qtyW + unitW + descW;
+
+  drawRect(tableX, y, abcW, totalRowH, headerBg);
+  text(formatCurrency(totalABC), tableX + abcW - 1, y + 5, {
+    align: "right",
+    bold: true,
+    size: 7,
+  });
+  tableX += abcW;
+
+  // Supplier totals
+  supplierColumns.slice(0, numSuppliers).forEach((sup) => {
+    const isWinner = sup.localId === winnerColId;
+    let supTotal = 0;
+    prLines.forEach((line) => {
+      const bid = bidsData[sup.localId]?.[line.prl_id];
+      const bidPrice = parseFloat(bid?.unitPriceBid || "0") || 0;
+      supTotal += bidPrice * (line.qty || 0);
+    });
+
+    drawRect(
+      tableX,
+      y,
+      supplierColW,
+      totalRowH,
+      isWinner ? winnerBg : headerBg,
+    );
+    text(formatCurrency(supTotal), tableX + supplierColW - 1, y + 5, {
+      align: "right",
+      bold: true,
+      size: 7,
+    });
+    tableX += supplierColW;
+  });
+
+  y += totalRowH + 8;
+
+  // Winner declaration
+  if (winnerColId) {
+    const winner = supplierColumns.find((s) => s.localId === winnerColId);
+    if (winner) {
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Winner: ${winner.name}`, marginLeft, y);
+    }
+  }
+
+  doc.save(`Abstract_${abstract.a_no || abstract.a_id}.pdf`);
 };
 
 // ════════════════════════════════════════════════════════════
@@ -126,7 +477,15 @@ const AbstractOfBids = () => {
   const [deliveryTerms, setDeliveryTerms] = useState<DeliveryTerm[]>([]);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
   const [submittedPRs, setSubmittedPRs] = useState<PurchaseRequest[]>([]);
+  const [allPRs, setAllPRs] = useState<PurchaseRequest[]>([]);
   const [centers, setCenters] = useState<ResponsibilityCenter[]>([]);
+  const [sections, setSections] = useState<ResponsibilityCenterSection[]>([]);
+
+  // ─── Edited specifications per PR line ────────
+  /** editedSpecs[prl_id] = array of specs */
+  const [editedSpecs, setEditedSpecs] = useState<
+    Record<string, EditableSpec[]>
+  >({});
 
   // ─── Selected delivery / payment term ──────────
   const [dtId, setDtId] = useState("");
@@ -157,10 +516,21 @@ const AbstractOfBids = () => {
 
   // ─── Form mode ─────────────────────────────────
   const [isNewAbstract, setIsNewAbstract] = useState(false);
+  const [selectedAbstract, setSelectedAbstract] = useState<Abstract | null>(
+    null,
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   // ─── Form validation error ──────────────────────
   const [formError, setFormError] = useState("");
+
+  // ─── Budget tracking ───────────────────────────
+  const [consumedBudget, setConsumedBudget] = useState(0);
+
+  // ─── PRs with winner-declared abstracts (for filtering) ──
+  const [prsWithWinnerDeclaredIds, setPrsWithWinnerDeclaredIds] = useState<
+    string[]
+  >([]);
 
   // ───────────────────────────────────────────────
   // DATA LOADING
@@ -168,22 +538,29 @@ const AbstractOfBids = () => {
 
   const loadList = useCallback(async () => {
     setListLoading(true);
-    const [abs, prs, rc, mp, dt, pt, sups] = await Promise.all([
-      fetchAbstracts(),
-      fetchSubmittedPRs(),
-      fetchResponsibilityCenters(),
-      fetchModesProcurement(),
-      fetchDeliveryTerms(),
-      fetchPaymentTerms(),
-      fetchSuppliers(),
-    ]);
+    const [abs, prs, allPrs, rc, secs, mp, dt, pt, sups, prsWithWinners] =
+      await Promise.all([
+        fetchAbstracts(),
+        fetchSubmittedPRs(),
+        fetchPurchaseRequests(),
+        fetchResponsibilityCenters(),
+        fetchSections(),
+        fetchModesProcurement(),
+        fetchDeliveryTerms(),
+        fetchPaymentTerms(),
+        fetchSuppliers(),
+        getPRsWithWinnerDeclared(),
+      ]);
     setAbstracts(abs);
     setSubmittedPRs(prs);
+    setAllPRs(allPrs);
     setCenters(rc);
+    setSections(secs);
     setModes(mp);
     setDeliveryTerms(dt);
     setPaymentTerms(pt);
     setSuppliers(sups);
+    setPrsWithWinnerDeclaredIds(prsWithWinners);
     setListLoading(false);
   }, []);
 
@@ -194,7 +571,20 @@ const AbstractOfBids = () => {
   // When PR changes in form, load its line items and auto-fill budget
   useEffect(() => {
     if (mode === "form" && prId) {
-      fetchPRLinesForAbstract(prId).then(setPrLines);
+      fetchPRLinesForAbstract(prId).then((lines) => {
+        setPrLines(lines);
+        // Initialize editedSpecs from PR lines
+        const specsMap: Record<string, EditableSpec[]> = {};
+        for (const line of lines) {
+          const parsed = parseSpecEntries(line.specifications ?? null);
+          specsMap[line.prl_id] = parsed.map((sp, i) => ({
+            id: `${line.prl_id}-spec-${i}`,
+            label: sp.label,
+            value: sp.value,
+          }));
+        }
+        setEditedSpecs(specsMap);
+      });
       // Always derive approved budget from the selected PR
       const pr = submittedPRs.find((p) => p.pr_id === prId);
       if (pr) {
@@ -203,6 +593,7 @@ const AbstractOfBids = () => {
     } else if (mode === "form" && !prId) {
       setPrLines([]);
       setApprovedBudget("");
+      setEditedSpecs({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prId, mode]);
@@ -212,24 +603,37 @@ const AbstractOfBids = () => {
   // ───────────────────────────────────────────────
 
   const openForm = async (abs?: Abstract) => {
-    const [sups, mp, dt, pt, prs, rc] = await Promise.all([
-      fetchSuppliers(),
-      modes.length ? Promise.resolve(modes) : fetchModesProcurement(),
-      deliveryTerms.length
-        ? Promise.resolve(deliveryTerms)
-        : fetchDeliveryTerms(),
-      paymentTerms.length ? Promise.resolve(paymentTerms) : fetchPaymentTerms(),
-      submittedPRs.length ? Promise.resolve(submittedPRs) : fetchSubmittedPRs(),
-      centers.length ? Promise.resolve(centers) : fetchResponsibilityCenters(),
-    ]);
+    const [sups, mp, dt, pt, prs, rc, secs, prsWithWinners] = await Promise.all(
+      [
+        fetchSuppliers(),
+        modes.length ? Promise.resolve(modes) : fetchModesProcurement(),
+        deliveryTerms.length
+          ? Promise.resolve(deliveryTerms)
+          : fetchDeliveryTerms(),
+        paymentTerms.length
+          ? Promise.resolve(paymentTerms)
+          : fetchPaymentTerms(),
+        submittedPRs.length
+          ? Promise.resolve(submittedPRs)
+          : fetchSubmittedPRs(),
+        centers.length
+          ? Promise.resolve(centers)
+          : fetchResponsibilityCenters(),
+        sections.length ? Promise.resolve(sections) : fetchSections(),
+        getPRsWithWinnerDeclared(),
+      ],
+    );
     setSuppliers(sups);
     setModes(mp);
     setDeliveryTerms(dt);
     setPaymentTerms(pt);
     setSubmittedPRs(prs);
     setCenters(rc);
+    setSections(secs);
+    setPrsWithWinnerDeclaredIds(prsWithWinners);
 
     if (abs) {
+      setSelectedAbstract(abs);
       setIsNewAbstract(false);
       setANo(abs.a_no);
       setADate(abs.a_date);
@@ -243,6 +647,18 @@ const AbstractOfBids = () => {
       // Load PR lines
       const lines = await fetchPRLinesForAbstract(abs.pr_id);
       setPrLines(lines);
+
+      // Initialize editedSpecs from PR lines
+      const specsMap: Record<string, EditableSpec[]> = {};
+      for (const line of lines) {
+        const parsed = parseSpecEntries(line.specifications ?? null);
+        specsMap[line.prl_id] = parsed.map((sp, i) => ({
+          id: `${line.prl_id}-spec-${i}`,
+          label: sp.label,
+          value: sp.value,
+        }));
+      }
+      setEditedSpecs(specsMap);
 
       // Load existing bidtures
       const existingBids = await fetchBidtures(abs.a_id);
@@ -276,8 +692,13 @@ const AbstractOfBids = () => {
       setSupplierCols(Array.from(supMap.values()));
       setBids(bidMap);
       setWinnerColId(winCol);
+
+      // Load consumed budget for this PR
+      const consumed = await getPRConsumedAmount(abs.pr_id);
+      setConsumedBudget(consumed);
     } else {
       // New mode
+      setSelectedAbstract(null);
       setIsNewAbstract(true);
       const nextNo = await generateNextAbstractNumber();
       setANo(nextNo);
@@ -292,6 +713,8 @@ const AbstractOfBids = () => {
       setSupplierCols([]);
       setBids({});
       setWinnerColId(null);
+      setEditedSpecs({});
+      setConsumedBudget(0);
     }
     setMode("form");
   };
@@ -355,6 +778,39 @@ const AbstractOfBids = () => {
       const price = parseFloat(cell?.unitPriceBid || "0") || 0;
       return sum + price * line.qty;
     }, 0);
+  };
+
+  // ───────────────────────────────────────────────
+  // SPEC EDITING HELPERS
+  // ───────────────────────────────────────────────
+
+  const updateSpecEntry = (
+    prlId: string,
+    specId: string,
+    field: "label" | "value",
+    newValue: string,
+  ) => {
+    setEditedSpecs((prev) => ({
+      ...prev,
+      [prlId]: (prev[prlId] || []).map((sp) =>
+        sp.id === specId ? { ...sp, [field]: newValue } : sp,
+      ),
+    }));
+  };
+
+  const addSpecEntry = (prlId: string) => {
+    const newId = `${prlId}-spec-${Date.now()}`;
+    setEditedSpecs((prev) => ({
+      ...prev,
+      [prlId]: [...(prev[prlId] || []), { id: newId, label: "", value: "" }],
+    }));
+  };
+
+  const removeSpecEntry = (prlId: string, specId: string) => {
+    setEditedSpecs((prev) => ({
+      ...prev,
+      [prlId]: (prev[prlId] || []).filter((sp) => sp.id !== specId),
+    }));
   };
 
   // ───────────────────────────────────────────────
@@ -521,6 +977,18 @@ const AbstractOfBids = () => {
       }
     }
 
+    // Save edited specifications to PR lines
+    for (const line of prLines) {
+      const lineSpecs = editedSpecs[line.prl_id] || [];
+      // Convert to JSON array of {label, value}
+      const specsJson = JSON.stringify(
+        lineSpecs
+          .filter((sp) => sp.label.trim() || sp.value.trim())
+          .map((sp) => ({ label: sp.label, value: sp.value })),
+      );
+      await updatePRLineSpecifications(line.prl_id, specsJson);
+    }
+
     setIsSaving(false);
     closeForm();
   };
@@ -533,7 +1001,9 @@ const AbstractOfBids = () => {
     centers.find((c) => c.id === rcId)?.description ?? rcId;
 
   const prLabel = (id: string) => {
-    const pr = submittedPRs.find((p) => p.pr_id === id);
+    const pr =
+      submittedPRs.find((p) => p.pr_id === id) ??
+      allPRs.find((p) => p.pr_id === id);
     return pr?.pr_no || id;
   };
 
@@ -578,6 +1048,44 @@ const AbstractOfBids = () => {
             Back to List
           </button>
           <div className="flex gap-2">
+            {!isNewAbstract && (
+              <button
+                type="button"
+                onClick={() => {
+                  const pr = allPRs.find((p) => p.pr_id === prId);
+                  const modeDesc =
+                    modes.find((m) => m.mp_id === mpId)?.description || "";
+                  generateAbstractPDF(
+                    {
+                      a_id: selectedAbstract?.a_id || "",
+                      a_no: aNo,
+                      a_date: aDate,
+                      mp_id: mpId,
+                      pr_id: prId,
+                      approved_budget: parseFloat(approvedBudget) || 0,
+                      dt_id: dtId || null,
+                      pt_id: ptId || null,
+                      winning_b_id: winnerColId,
+                      status: "AWARDED",
+                      remarks: abstractRemarks || null,
+                      created_at: selectedAbstract?.created_at || "",
+                      updated_at: selectedAbstract?.updated_at || "",
+                      id: selectedAbstract?.a_id || "",
+                    },
+                    prLines,
+                    supplierCols,
+                    bids,
+                    winnerColId,
+                    pr?.pr_no || "",
+                    modeDesc,
+                  );
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium"
+              >
+                <Download className="w-4 h-4" />
+                Download PDF
+              </button>
+            )}
             {isNewAbstract ? (
               <button
                 type="button"
@@ -591,7 +1099,7 @@ const AbstractOfBids = () => {
             ) : (
               <span className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium border border-green-300">
                 <Trophy className="w-4 h-4" />
-                View Only — Winner Declared
+                Winner Declared
               </span>
             )}
           </div>
@@ -738,6 +1246,42 @@ const AbstractOfBids = () => {
                         ? "0.00"
                         : "—"}
                   </div>
+                  {/* Show consumed and remaining budget for existing abstracts */}
+                  {isReadOnly && consumedBudget > 0 && (
+                    <div className="mt-2 space-y-1 text-[10px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Winner's Total:</span>
+                        <span className="text-red-600 font-semibold">
+                          - {peso(supplierTotal(winnerColId || ""))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Total Consumed:</span>
+                        <span className="text-orange-600 font-semibold">
+                          {peso(consumedBudget)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-gray-300 pt-1">
+                        <span className="text-gray-700 font-semibold">
+                          Remaining Budget:
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            parseFloat(approvedBudget) - consumedBudget > 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {peso(
+                            Math.max(
+                              0,
+                              parseFloat(approvedBudget) - consumedBudget,
+                            ),
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </td>
                 <td className={`${cellBorder} ${cellPad} border-b-0`}>
                   <span className={labelCls}>Purchase Request Number:</span>
@@ -748,11 +1292,31 @@ const AbstractOfBids = () => {
                     disabled={isReadOnly}
                   >
                     <option value="">-- Select PR --</option>
-                    {submittedPRs.map((pr) => (
-                      <option key={pr.pr_id} value={pr.pr_id}>
-                        {pr.pr_no} — {pr.purpose}
-                      </option>
-                    ))}
+                    {submittedPRs
+                      .filter((pr) => {
+                        // When creating new abstract, exclude PRs that already have winner-declared abstracts
+                        if (isNewAbstract) {
+                          return !prsWithWinnerDeclaredIds.includes(pr.pr_id);
+                        }
+                        // When viewing/editing existing abstract, always show the currently selected PR
+                        return true;
+                      })
+                      .map((pr) => {
+                        const deptName =
+                          centers.find((c) => c.id === pr.rc_id)?.description ||
+                          "";
+                        const secName =
+                          sections.find((s) => s.id === pr.rcs_id)
+                            ?.description || "";
+                        const location = secName
+                          ? `${deptName}, ${secName}`
+                          : deptName;
+                        return (
+                          <option key={pr.pr_id} value={pr.pr_id}>
+                            {pr.pr_no} - {location}
+                          </option>
+                        );
+                      })}
                   </select>
                 </td>
                 <td
@@ -1049,7 +1613,11 @@ const AbstractOfBids = () => {
                 )}
 
                 {prLines.map((line, idx) => {
-                  const specs = parseSpecEntries(line.specifications ?? null);
+                  // Separate variables for different modes to avoid type issues
+                  const editableSpecs = editedSpecs[line.prl_id] || [];
+                  const readOnlySpecs = parseSpecEntries(
+                    line.specifications ?? null,
+                  );
                   // Find winning supplier bids for this line
                   const winSup = winnerColId
                     ? bids[winnerColId]?.[line.prl_id]
@@ -1074,18 +1642,81 @@ const AbstractOfBids = () => {
                         <div className="font-semibold">
                           {line.item_description}
                         </div>
-                        {specs.length > 0 && (
-                          <div className="mt-1 text-[10px] leading-relaxed text-gray-600">
-                            <span className="font-semibold uppercase text-gray-500">
-                              Product Specifications:
-                            </span>
-                            {specs.map((sp, i) => (
-                              <div key={i}>
-                                <span className="font-bold">{sp.label}</span>
-                                {sp.value ? `: ${sp.value}` : ""}
+                        {/* Editable specs when creating new abstract */}
+                        {!isReadOnly ? (
+                          <div className="mt-1 text-[10px] leading-relaxed">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold uppercase text-gray-500">
+                                Product Specifications:
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addSpecEntry(line.prl_id)}
+                                className="text-[9px] text-blue-600 hover:text-blue-800 font-semibold print:hidden"
+                              >
+                                + Add Spec
+                              </button>
+                            </div>
+                            {editableSpecs.map((sp) => (
+                              <div
+                                key={sp.id}
+                                className="flex items-center gap-1 mb-0.5"
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="Spec Name"
+                                  className="w-20 text-[10px] px-1 py-0.5 border border-gray-300 rounded bg-white"
+                                  value={sp.label}
+                                  onChange={(e) =>
+                                    updateSpecEntry(
+                                      line.prl_id,
+                                      sp.id,
+                                      "label",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                                <span className="text-gray-400">:</span>
+                                <input
+                                  type="text"
+                                  placeholder="Value"
+                                  className="flex-1 text-[10px] px-1 py-0.5 border border-gray-300 rounded bg-white"
+                                  value={sp.value}
+                                  onChange={(e) =>
+                                    updateSpecEntry(
+                                      line.prl_id,
+                                      sp.id,
+                                      "value",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeSpecEntry(line.prl_id, sp.id)
+                                  }
+                                  className="text-gray-400 hover:text-red-500 text-xs print:hidden"
+                                >
+                                  ×
+                                </button>
                               </div>
                             ))}
                           </div>
+                        ) : (
+                          readOnlySpecs.length > 0 && (
+                            <div className="mt-1 text-[10px] leading-relaxed text-gray-600">
+                              <span className="font-semibold uppercase text-gray-500">
+                                Product Specifications:
+                              </span>
+                              {readOnlySpecs.map((sp, i) => (
+                                <div key={i}>
+                                  <span className="font-bold">{sp.label}</span>
+                                  {sp.value ? `: ${sp.value}` : ""}
+                                </div>
+                              ))}
+                            </div>
+                          )
                         )}
                       </td>
 

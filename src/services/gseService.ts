@@ -613,3 +613,32 @@ export const getOrCreateUnit = async (code: string): Promise<string | null> => {
   }
   return data?.u_id ?? null;
 };
+
+export const getOrCreateSpec = async (
+  description: string,
+): Promise<string | null> => {
+  if (!isSupabaseConfigured() || !supabase || !description.trim()) return null;
+
+  const { data: existing } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("specs")
+    .select("s_id")
+    .ilike("description", description.trim())
+    .limit(1);
+
+  if (existing && existing.length > 0) return existing[0].s_id;
+
+  const s_code = "SPEC-" + Date.now().toString().slice(-6);
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("gse")
+    .from("specs")
+    .insert({ s_code, description: description.trim(), is_active: true })
+    .select("s_id")
+    .single();
+
+  if (error) {
+    console.error("Error creating spec:", error);
+    return null;
+  }
+  return data?.s_id ?? null;
+};

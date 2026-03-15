@@ -257,3 +257,91 @@ export interface PurchaseOrderFormData {
   issued_by?: string;
   received_by?: string;
 }
+
+// ── Delivery Receipt ──────────────────────────────────────
+
+export interface DeliveryReceipt {
+  dr_id: string;
+  dr_no: string;
+  dr_date: string;
+  po_id: string;
+  supplier_dr_no: string | null;
+  supplier_invoice_no: string | null;
+  delivery_date: string | null;
+  received_by: string | null;
+  inspected_by: string | null;
+  approved_by: string | null;
+  status: "DRAFT" | "INSPECTED" | "ACCEPTED" | "PARTIAL" | "REJECTED";
+  remarks: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined
+  po_no?: string;
+  supplier_name?: string;
+}
+
+export interface DeliveryReceiptLine {
+  drl_id: string;
+  dr_id: string;
+  pol_id: string;
+  qty_delivered: number;
+  qty_accepted: number;
+  qty_rejected: number;
+  rejection_reason: string | null;
+  inspection_notes: string | null;
+  created_at: string;
+  // joined
+  item_description?: string;
+  unit_code?: string;
+  qty_ordered?: number;
+  unit_price?: number;
+}
+
+export interface DeliveryReceiptFormData {
+  dr_no?: string;
+  dr_date: string;
+  po_id: string;
+  supplier_dr_no?: string;
+  supplier_invoice_no?: string;
+  delivery_date?: string;
+  received_by?: string;
+  inspected_by?: string;
+  approved_by?: string;
+  status?: string;
+  remarks?: string;
+}
+
+// ── Workflow Log ──────────────────────────────────────
+
+export interface WorkflowLog {
+  log_id: string;
+  entity_type: "PR" | "ABSTRACT" | "PO" | "DR";
+  entity_id: string;
+  entity_no: string | null;
+  from_status: string | null;
+  to_status: string;
+  changed_by: string | null;
+  changed_at: string;
+  remarks: string | null;
+  created_at: string;
+}
+
+// ── Procurement Dashboard Stats ──────────────────────────────────────
+
+export interface ProcurementDashboardStats {
+  pr_draft: number;
+  pr_pending: number;
+  pr_approved: number;
+  pr_rejected: number;
+  pr_total_approved_amount: number;
+  abs_draft: number;
+  abs_evaluated: number;
+  abs_awarded: number;
+  po_draft: number;
+  po_issued: number;
+  po_received: number;
+  po_total_issued_amount: number;
+  po_total_received_amount: number;
+  dr_draft: number;
+  dr_accepted: number;
+}
