@@ -115,3 +115,53 @@ export interface TreasuryStats {
   total_receipts_year: number;
   total_amount_year: number;
 }
+
+export type TreasuryFundType = 'General' | 'SEF' | 'Trust';
+
+export interface TreasuryAccountCode {
+  id: string;
+  code: string;
+  description: string;
+  fund_type: TreasuryFundType;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateTreasuryAccountCodePayload {
+  code: string;
+  description: string;
+  fund_type: TreasuryFundType;
+  is_active: boolean;
+}
+
+export interface UpdateTreasuryAccountCodePayload {
+  code?: string;
+  description?: string;
+  fund_type?: TreasuryFundType;
+  is_active?: boolean;
+}
+
+export interface TreasuryOfficialReceipt {
+  id: string;
+  or_number: string;
+  or_date: string;
+  payor: string;
+  type: string;
+  amount: number;
+  account_code_id: string;
+  account_code?: string;
+  is_printed: boolean;
+  printed_at: string | null;
+  created_at: string;
+  account?: TreasuryAccountCode;
+}
+
+export interface CreateTreasuryOfficialReceiptPayload {
+  or_number: string;
+  or_date: string;
+  payor: string;
+  type: string;
+  amount: number;
+  account_code_id: string;
+}

@@ -7,6 +7,11 @@ import type {
   PaymentMethod,
   ORSeries,
   TreasuryStats,
+  TreasuryAccountCode,
+  CreateTreasuryAccountCodePayload,
+  UpdateTreasuryAccountCodePayload,
+  TreasuryOfficialReceipt,
+  CreateTreasuryOfficialReceiptPayload,
 } from '../types/treasury.types';
 
 // ============================================================================
@@ -452,4 +457,110 @@ export async function getCollectionSummaryByType(fiscalYear: number, fiscalMonth
   }, {});
 
   return Object.values(summary || {});
+}
+
+// ============================================================================
+// TREASURY ACCOUNT PLAN + OR OPERATIONS (treasury schema)
+// ============================================================================
+
+export async function getTreasuryAccountCodes() {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('account_codes')
+    .select('*')
+    .order('code', { ascending: true });
+
+  if (error) throw error;
+  return (data || []) as TreasuryAccountCode[];
+}
+
+export async function createTreasuryAccountCode(payload: CreateTreasuryAccountCodePayload) {
+  if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase not configured');
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('account_codes')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as TreasuryAccountCode;
+}
+
+export async function updateTreasuryAccountCode(id: string, payload: UpdateTreasuryAccountCodePayload) {
+  if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase not configured');
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('account_codes')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as TreasuryAccountCode;
+}
+
+export async function deleteTreasuryAccountCode(id: string) {
+  if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase not configured');
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('account_codes')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+  return true;
+}
+
+export async function getTreasuryOfficialReceipts() {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('official_receipts')
+    .select(`
+      *,
+      account:account_code_id(*)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as TreasuryOfficialReceipt[];
+}
+
+export async function createTreasuryOfficialReceipt(payload: CreateTreasuryOfficialReceiptPayload) {
+  if (!isSupabaseConfigured() || !supabase) throw new Error('Supabase not configured');
+
+  const { data: accountCode, error: accountError } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('account_codes')
+    .select('code')
+    .eq('id', payload.account_code_id)
+    .single();
+
+  if (accountError) throw accountError;
+
+  const insertData = {
+    ...payload,
+    account_code: accountCode?.code,
+  };
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema('treasury')
+    .from('official_receipts')
+    .insert(insertData)
+    .select(`
+      *,
+      account:account_code_id(*)
+    `)
+    .single();
+
+  if (error) throw error;
+  return data as TreasuryOfficialReceipt;
 }

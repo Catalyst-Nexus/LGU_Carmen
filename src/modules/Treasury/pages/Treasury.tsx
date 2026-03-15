@@ -5,7 +5,7 @@ import CashflowMonitoring from './CashflowMonitoring';
 import CollectionMonitoring from './CollectionMonitoring';
 import DisbursementTracking from './DisbursementTracking';
 import BankReconciliation from './BankReconciliation';
-import OfficialReceipts from './OfficialReceipts';
+import OfficialReceiptPage from './OfficialReceiptPage';
 
 const TreasuryHome = () => {
   const navigate = useNavigate();
@@ -314,7 +314,7 @@ const Treasury = () => {
               <ArrowLeft className="w-4 h-4" />
               Back to Treasury
             </button>
-            <OfficialReceipts />
+            <OfficialReceiptPage />
           </div>
         }
       />
