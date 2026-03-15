@@ -51,7 +51,7 @@ ON CONFLICT (route_path) DO UPDATE
 
 INSERT INTO modules (module_name, route_path, file_path, category, icons, is_active)
 VALUES
-  ('Treasury Dashboard',            '/accounting/treasury',                     'modules/Treasury/pages/Treasury',                      'TREASURY',   'Coins',           true),
+  ('Treasury Dashboard',            '/accounting/treasury/*',                   'modules/Treasury/pages/Treasury',                      'TREASURY',   'Coins',           true),
   ('Official Receipts',             '/accounting/treasury/official-receipts',   'modules/Treasury/pages/OfficialReceipts',              'TREASURY',   'FileText',        true),
   ('Cashflow Monitoring',           '/accounting/treasury/cashflow',            'modules/Treasury/pages/CashflowMonitoring',            'TREASURY',   'BarChart3',       true),
   ('Collection Monitoring',         '/accounting/treasury/collections',         'modules/Treasury/pages/CollectionMonitoring',          'TREASURY',   'TrendingUp',      true),

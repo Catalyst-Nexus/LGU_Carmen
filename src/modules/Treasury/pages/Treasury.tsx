@@ -5,7 +5,7 @@ import CashflowMonitoring from './CashflowMonitoring';
 import CollectionMonitoring from './CollectionMonitoring';
 import DisbursementTracking from './DisbursementTracking';
 import BankReconciliation from './BankReconciliation';
-import OfficialReceiptPage from './OfficialReceiptPage';
+import OfficialReceiptPage from "./OfficialReceiptPage";
 
 const TreasuryHome = () => {
   const navigate = useNavigate();
