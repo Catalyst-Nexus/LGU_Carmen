@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Plus, Printer, Search } from 'lucide-react';
-import { ActionsBar, PrimaryButton } from '@/components/ui';
+import { Pencil, Plus, Printer, Search, Trash2 } from 'lucide-react';
+import { ActionsBar, IconButton, PrimaryButton } from '@/components/ui';
 import { BaseDialog, FormInput } from '@/components/ui/dialog';
 import { supabase } from '@/services/supabase';
 import type { TreasuryAccountCode, TreasuryOfficialReceipt } from '@/types/treasury.types';
@@ -11,6 +11,8 @@ interface OfficialReceiptGenerationProps {
   receipts: TreasuryOfficialReceipt[];
   isLoadingReceipts: boolean;
   onReceiptCreated: (receipt: TreasuryOfficialReceipt) => void;
+  onReceiptUpdated: (receipt: TreasuryOfficialReceipt) => void;
+  onReceiptDeleted: (id: string) => void;
 }
 
 export default function OfficialReceiptGeneration({
@@ -18,8 +20,11 @@ export default function OfficialReceiptGeneration({
   receipts,
   isLoadingReceipts,
   onReceiptCreated,
+  onReceiptUpdated,
+  onReceiptDeleted,
 }: OfficialReceiptGenerationProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<TreasuryOfficialReceipt | null>(null);
   const [orNumber, setOrNumber] = useState('');
   const [payor, setPayor] = useState('');
   const [receiptType, setReceiptType] = useState('');
@@ -30,10 +35,7 @@ export default function OfficialReceiptGeneration({
 
   const [search, setSearch] = useState('');
 
-  const activeCodes = useMemo(
-    () => accountCodes,
-    [accountCodes]
-  );
+  const activeCodes = useMemo(() => accountCodes, [accountCodes]);
 
   const getAccount = (item: TreasuryOfficialReceipt) =>
     item.account ?? accountCodes.find((c) => c.id === item.account_code_id) ?? null;
@@ -60,14 +62,41 @@ export default function OfficialReceiptGeneration({
     );
   }, [receipts, search]);
 
-  const openDialog = () => {
+  const resetForm = () => {
+    setEditing(null);
     setOrNumber('');
     setPayor('');
     setReceiptType('');
     setAccountCodeId('');
     setAmount('');
     setFormError('');
+  };
+
+  const openAdd = () => {
+    resetForm();
     setDialogOpen(true);
+  };
+
+  const openEdit = (item: TreasuryOfficialReceipt) => {
+    setEditing(item);
+    setOrNumber(item.or_number);
+    setPayor(item.payor);
+    setReceiptType(item.type);
+    setAccountCodeId(item.account_code_id);
+    setAmount(String(item.amount));
+    setFormError('');
+    setDialogOpen(true);
+  };
+
+  const validate = () => {
+    if (!orNumber.trim()) return 'OR Number is required.';
+    if (!payor.trim()) return 'Payor is required.';
+    if (!receiptType.trim()) return 'Type is required.';
+    if (!accountCodeId) return 'Please select an Account Title from the list.';
+    if (!amount) return 'Amount is required.';
+    if (!selectedCode) return 'Please select a valid Account Title from Treasury Account Plan.';
+    if (totalAmount <= 0) return 'Please enter a valid amount greater than zero.';
+    return null;
   };
 
   const handleSubmit = async () => {
@@ -76,67 +105,78 @@ export default function OfficialReceiptGeneration({
       return;
     }
 
-    if (!orNumber.trim()) {
-      setFormError('OR Number is required.');
-      return;
-    }
-
-    if (!payor.trim()) {
-      setFormError('Payor is required.');
-      return;
-    }
-
-    if (!receiptType.trim()) {
-      setFormError('Type is required.');
-      return;
-    }
-
-    if (!accountCodeId) {
-      setFormError('Please select an Account Title from the list.');
-      return;
-    }
-
-    if (!amount) {
-      setFormError('Amount is required.');
-      return;
-    }
-
-    if (!selectedCode) {
-      setFormError('Please select a valid Account Title from Treasury Account Plan.');
-      return;
-    }
-
-    if (totalAmount <= 0) {
-      setFormError('Please enter a valid amount greater than zero.');
+    const validationError = validate();
+    if (validationError) {
+      setFormError(validationError);
       return;
     }
 
     setIsSaving(true);
     setFormError('');
 
-    const { data, error } = await supabase
+    const payload = {
+      or_number: orNumber.trim(),
+      payor: payor.trim(),
+      type: receiptType.trim(),
+      amount: totalAmount,
+      account_code: selectedCode!.code,
+      account_code_id: selectedCode!.id,
+    };
+
+    if (editing) {
+      const { data, error } = await supabase
+        .schema('treasury')
+        .from('receipts')
+        .update(payload)
+        .eq('id', editing.id)
+        .select('*')
+        .single();
+
+      setIsSaving(false);
+
+      if (error) {
+        setFormError(error.message || 'Failed to update official receipt.');
+        return;
+      }
+
+      onReceiptUpdated({ ...data, account: selectedCode } as TreasuryOfficialReceipt);
+    } else {
+      const { data, error } = await supabase
+        .schema('treasury')
+        .from('receipts')
+        .insert(payload)
+        .select('*')
+        .single();
+
+      setIsSaving(false);
+
+      if (error) {
+        setFormError(error.message || 'Failed to save official receipt.');
+        return;
+      }
+
+      onReceiptCreated({ ...data, account: selectedCode } as TreasuryOfficialReceipt);
+    }
+
+    setDialogOpen(false);
+  };
+
+  const handleDelete = async (item: TreasuryOfficialReceipt) => {
+    if (!supabase) return;
+    if (!confirm(`Delete OR ${item.or_number}? This cannot be undone.`)) return;
+
+    const { error } = await supabase
       .schema('treasury')
       .from('receipts')
-      .insert({
-        or_number: orNumber.trim(),
-        payor: payor.trim(),
-        type: receiptType.trim(),
-        amount: totalAmount,
-        account_code: selectedCode.code,
-        account_code_id: selectedCode.id,
-      })
-      .select('*')
-      .single();
-
-    setIsSaving(false);
+      .delete()
+      .eq('id', item.id);
 
     if (error) {
-      setFormError(error.message || 'Failed to save official receipt.');
+      alert(error.message);
       return;
     }
 
-    onReceiptCreated({ ...data, account: selectedCode } as TreasuryOfficialReceipt);
-    setDialogOpen(false);
+    onReceiptDeleted(item.id);
   };
 
   const handlePrint = (item: TreasuryOfficialReceipt) => {
@@ -202,7 +242,7 @@ export default function OfficialReceiptGeneration({
   return (
     <>
       <ActionsBar>
-        <PrimaryButton onClick={openDialog} disabled={activeCodes.length === 0}>
+        <PrimaryButton onClick={openAdd} disabled={activeCodes.length === 0}>
           <Plus className="w-4 h-4" />
           Generate OR
         </PrimaryButton>
@@ -267,14 +307,22 @@ export default function OfficialReceiptGeneration({
                       })}
                     </td>
                     <td className={`${tdCls} text-right`}>
-                      <button
-                        onClick={() => handlePrint(item)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-background transition-colors"
-                        title="Print OR"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        Print
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handlePrint(item)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-border rounded-lg text-xs font-medium text-foreground hover:bg-background transition-colors"
+                          title="Print OR"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          Print
+                        </button>
+                        <IconButton title="Edit" onClick={() => openEdit(item)}>
+                          <Pencil className="w-4 h-4" />
+                        </IconButton>
+                        <IconButton title="Delete" variant="danger" onClick={() => handleDelete(item)}>
+                          <Trash2 className="w-4 h-4" />
+                        </IconButton>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -290,13 +338,12 @@ export default function OfficialReceiptGeneration({
         )}
       </div>
 
-      {/* Generate OR Dialog */}
       <BaseDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleSubmit}
-        title="Generate Official Receipt"
-        submitLabel={isSaving ? 'Saving...' : 'Save OR'}
+        title={editing ? 'Edit Official Receipt' : 'Generate Official Receipt'}
+        submitLabel={isSaving ? 'Saving...' : editing ? 'Save Changes' : 'Save OR'}
         isLoading={isSaving}
       >
         <div className="space-y-4">

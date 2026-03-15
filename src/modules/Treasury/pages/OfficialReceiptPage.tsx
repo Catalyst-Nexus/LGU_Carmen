@@ -78,6 +78,14 @@ export default function OfficialReceiptPage() {
     setReceipts((prev) => [receipt, ...prev]);
   };
 
+  const handleReceiptUpdated = (receipt: TreasuryOfficialReceipt) => {
+    setReceipts((prev) => prev.map((r) => (r.id === receipt.id ? receipt : r)));
+  };
+
+  const handleReceiptDeleted = (id: string) => {
+    setReceipts((prev) => prev.filter((r) => r.id !== id));
+  };
+
   return (
     <div className="p-6 space-y-6">
       <PageHeader
@@ -124,6 +132,8 @@ export default function OfficialReceiptPage() {
           receipts={receipts}
           isLoadingReceipts={loadingReceipts}
           onReceiptCreated={handleReceiptCreated}
+          onReceiptUpdated={handleReceiptUpdated}
+          onReceiptDeleted={handleReceiptDeleted}
         />
       )}
     </div>
