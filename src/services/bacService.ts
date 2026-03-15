@@ -574,18 +574,20 @@ export const upsertPOLines = async (
     prl_id: string;
     qty_ordered: number;
     unit_price: number;
-    pol_total_amount: number;
+    pol_total_amount?: number;
   }[],
 ): Promise<{ success: boolean; error?: string }> => {
   if (!isSupabaseConfigured() || !supabase)
     return { success: false, error: "Supabase is not configured" };
 
+  const payload = rows.map(({ pol_total_amount: _, ...rest }) => rest);
+
   const { error } = await (supabase as NonNullable<typeof supabase>)
     .schema("bac")
     .from("purchase_order_list")
-    .insert(rows);
+    .insert(payload);
   if (error) {
-    console.error("Error inserting PO lines:", error);
+    console.error("Error upserting PO lines:", error);
     return { success: false, error: error.message };
   }
   return { success: true };
@@ -1293,7 +1295,7 @@ export const fetchPOLinesForDR = async (
 
   let poLines = polData || [];
 
-  // Step 2: if no saved lines and we have an abstract, create them from winning bidtures
+  // Step 2: if no saved lines and we have an abstract, get items from winning bidtures (display only)
   if (poLines.length === 0 && aId) {
     const { data: abstractData } = await (
       supabase as NonNullable<typeof supabase>
@@ -1311,33 +1313,35 @@ export const fetchPOLinesForDR = async (
       ]);
 
       if (winBids.length > 0) {
-        const newLines = winBids.map((bid) => {
+        // Build display-only items from winning bidtures (no actual pol_id yet)
+        const displayLines = winBids.map((bid) => {
           const prl = prLinesData.find((l) => l.prl_id === bid.prl_id);
           return {
+            pol_id: `pending:${bid.prl_id}`, // Marker for display-only
             po_id: poId,
             b_id: bid.b_id,
             prl_id: bid.prl_id,
             qty_ordered: prl?.qty || 1,
             unit_price: bid.unit_price_bid,
             pol_total_amount: bid.unit_total_amount_bid,
+            qty_delivered: 0,
+            delivery_status: "PENDING",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            pending_qty: prl?.qty || 1,
+            item_description: prl?.item_description || "",
+            item_code: prl?.item_code || "",
+            unit_code: prl?.unit_code || "",
           };
         });
-
-        // Silently attempt insert — ignore errors (may already exist or constraint)
-        await (supabase as NonNullable<typeof supabase>)
-          .schema("bac")
-          .from("purchase_order_list")
-          .insert(newLines);
-
-        // Always re-fetch regardless of insert result
-        const { data: refetched } = await (
-          supabase as NonNullable<typeof supabase>
-        )
-          .schema("bac")
-          .from("purchase_order_list")
-          .select("*")
-          .eq("po_id", poId);
-        poLines = refetched || [];
+        return displayLines as Array<
+          PurchaseOrderLine & {
+            pending_qty: number;
+            item_description: string;
+            item_code: string;
+            unit_code: string;
+          }
+        >;
       }
     }
   }

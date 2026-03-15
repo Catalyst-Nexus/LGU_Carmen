@@ -31,7 +31,11 @@ import {
   fetchPOLinesForDR,
   updatePOLineDelivery,
   logWorkflowChange,
+  fetchWinningBidtures,
+  fetchPRLinesForAbstract,
+  upsertPOLines,
 } from "@/services/bacService";
+import { supabase } from "@/services/supabase";
 
 // ────────────────────────────────────────────────────────────
 // HELPERS & TYPES
@@ -415,6 +419,68 @@ const DeliveryReceipt = () => {
     }
 
     setSaving(true);
+
+    // Check if items are "pending" (no actual PO lines exist yet)
+    const hasPendingItems = drLines.some((l) =>
+      l.pol_id.startsWith("pending:"),
+    );
+    if (hasPendingItems) {
+      // Auto-save PO lines first
+      const po = purchaseOrders.find((p) => p.po_id === selectedPOId);
+      if (!po || !po.a_id) {
+        setSaving(false);
+        alert("Cannot save: Purchase Order or Abstract not found.");
+        return;
+      }
+
+      // Fetch abstract PR ID
+      const { data: abstractData } = await (supabase as NonNullable<typeof supabase>)
+        .schema("bac")
+        .from("abstract")
+        .select("pr_id")
+        .eq("a_id", po.a_id)
+        .single();
+
+      if (!abstractData?.pr_id) {
+        setSaving(false);
+        alert("Cannot save: Abstract PR not found.");
+        return;
+      }
+
+      // Fetch winning bidtures and PR lines
+      const [winBids, prLinesData] = await Promise.all([
+        fetchWinningBidtures(po.a_id),
+        fetchPRLinesForAbstract(abstractData.pr_id),
+      ]);
+
+      const poLinesToCreate = winBids.map((bid) => {
+        const prl = prLinesData.find((l) => l.prl_id === bid.prl_id);
+        return {
+          po_id: selectedPOId,
+          b_id: bid.b_id,
+          prl_id: bid.prl_id,
+          qty_ordered: prl?.qty || 1,
+          unit_price: bid.unit_price_bid,
+          pol_total_amount: bid.unit_total_amount_bid,
+        };
+      });
+
+      if (poLinesToCreate.length > 0) {
+        const lineRes = await upsertPOLines(poLinesToCreate);
+        if (!lineRes.success) {
+          setSaving(false);
+          alert(
+            "Failed to create PO line items: " +
+              (lineRes.error || "Unknown error"),
+          );
+          return;
+        }
+
+        // Reload PO lines with real pol_id values
+        await loadPOLines(selectedPOId);
+      }
+    }
+
     try {
       const formData = {
         dr_no: drNo,

@@ -753,7 +753,14 @@ const PurchaseOrder = () => {
       // Re-insert PO lines
       await deletePOLinesByOrder(editingPO.po_id);
       const lineRows = buildPOLineRows(editingPO.po_id);
-      if (lineRows.length > 0) await upsertPOLines(lineRows);
+      if (lineRows.length > 0) {
+        const lineRes = await upsertPOLines(lineRows);
+        if (!lineRes.success) {
+          setIsSaving(false);
+          setFormError(lineRes.error || "Failed to save PO line items");
+          return;
+        }
+      }
     } else {
       const res = await createPurchaseOrder({
         ...formData,
@@ -765,7 +772,14 @@ const PurchaseOrder = () => {
         return;
       }
       const lineRows = buildPOLineRows(res.po_id);
-      if (lineRows.length > 0) await upsertPOLines(lineRows);
+      if (lineRows.length > 0) {
+        const lineRes = await upsertPOLines(lineRows);
+        if (!lineRes.success) {
+          setIsSaving(false);
+          setFormError(lineRes.error || "Failed to save PO line items");
+          return;
+        }
+      }
     }
 
     setIsSaving(false);
