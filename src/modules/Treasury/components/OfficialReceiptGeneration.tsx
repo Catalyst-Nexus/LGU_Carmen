@@ -21,7 +21,6 @@ export default function OfficialReceiptGeneration({
 }: OfficialReceiptGenerationProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [orNumber, setOrNumber] = useState('');
-  const [orDate, setOrDate] = useState(new Date().toISOString().split('T')[0]);
   const [payor, setPayor] = useState('');
   const [receiptType, setReceiptType] = useState('');
   const [accountCodeId, setAccountCodeId] = useState('');
@@ -35,6 +34,9 @@ export default function OfficialReceiptGeneration({
     () => accountCodes,
     [accountCodes]
   );
+
+  const getAccount = (item: TreasuryOfficialReceipt) =>
+    item.account ?? accountCodes.find((c) => c.id === item.account_code_id) ?? null;
 
   const selectedCode = useMemo(
     () => activeCodes.find((item) => item.id === accountCodeId) || null,
@@ -54,14 +56,12 @@ export default function OfficialReceiptGeneration({
         item.or_number.toLowerCase().includes(term) ||
         item.payor.toLowerCase().includes(term) ||
         item.type.toLowerCase().includes(term) ||
-        (item.account?.description || '').toLowerCase().includes(term) ||
-        (item.account_code || '').toLowerCase().includes(term)
+        (getAccount(item)?.description || '').toLowerCase().includes(term)
     );
   }, [receipts, search]);
 
   const openDialog = () => {
     setOrNumber('');
-    setOrDate(new Date().toISOString().split('T')[0]);
     setPayor('');
     setReceiptType('');
     setAccountCodeId('');
@@ -76,8 +76,28 @@ export default function OfficialReceiptGeneration({
       return;
     }
 
-    if (!orNumber.trim() || !orDate || !payor.trim() || !receiptType.trim() || !accountCodeId || !amount) {
-      setFormError('Please fill in all required fields.');
+    if (!orNumber.trim()) {
+      setFormError('OR Number is required.');
+      return;
+    }
+
+    if (!payor.trim()) {
+      setFormError('Payor is required.');
+      return;
+    }
+
+    if (!receiptType.trim()) {
+      setFormError('Type is required.');
+      return;
+    }
+
+    if (!accountCodeId) {
+      setFormError('Please select an Account Title from the list.');
+      return;
+    }
+
+    if (!amount) {
+      setFormError('Amount is required.');
       return;
     }
 
@@ -96,17 +116,16 @@ export default function OfficialReceiptGeneration({
 
     const { data, error } = await supabase
       .schema('treasury')
-      .from('official_receipts')
+      .from('receipts')
       .insert({
         or_number: orNumber.trim(),
-        or_date: orDate,
         payor: payor.trim(),
         type: receiptType.trim(),
         amount: totalAmount,
-        account_code_id: selectedCode.id,
         account_code: selectedCode.code,
+        account_code_id: selectedCode.id,
       })
-      .select(`*, account:account_code_id(*)`)
+      .select('*')
       .single();
 
     setIsSaving(false);
@@ -116,7 +135,7 @@ export default function OfficialReceiptGeneration({
       return;
     }
 
-    onReceiptCreated(data as TreasuryOfficialReceipt);
+    onReceiptCreated({ ...data, account: selectedCode } as TreasuryOfficialReceipt);
     setDialogOpen(false);
   };
 
@@ -127,8 +146,9 @@ export default function OfficialReceiptGeneration({
       return;
     }
 
-    const accountDesc = item.account?.description || item.account_code || '—';
-    const accountCode = item.account?.code || item.account_code || '—';
+    const account = getAccount(item);
+    const accountDesc = account?.description || '—';
+    const accountCode = account?.code || item.account_code || '—';
     const formattedAmount = Number(item.amount).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -158,7 +178,6 @@ export default function OfficialReceiptGeneration({
         </div>
         <div class="section">
           <div class="row"><span class="label">OR Number:</span> ${item.or_number}</div>
-          <div class="row"><span class="label">OR Date:</span> ${item.or_date}</div>
           <div class="row"><span class="label">Payor:</span> ${item.payor}</div>
           <div class="row"><span class="label">Type:</span> ${item.type}</div>
           <div class="row"><span class="label">Account Title:</span> ${accountDesc}</div>
@@ -212,7 +231,6 @@ export default function OfficialReceiptGeneration({
               <tr>
                 <th className={thCls}>#</th>
                 <th className={thCls}>OR Number</th>
-                <th className={thCls}>Date</th>
                 <th className={thCls}>Payor</th>
                 <th className={thCls}>Account Title</th>
                 <th className={thCls}>Type</th>
@@ -223,13 +241,13 @@ export default function OfficialReceiptGeneration({
             <tbody>
               {isLoadingReceipts ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
                     Loading receipt records...
                   </td>
                 </tr>
               ) : filteredReceipts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
                     No official receipts found.
                   </td>
                 </tr>
@@ -238,9 +256,8 @@ export default function OfficialReceiptGeneration({
                   <tr key={item.id} className="hover:bg-background transition-colors">
                     <td className={`${tdCls} text-muted`}>{index + 1}</td>
                     <td className={tdCls}>{item.or_number}</td>
-                    <td className={tdCls}>{item.or_date}</td>
                     <td className={tdCls}>{item.payor}</td>
-                    <td className={tdCls}>{item.account?.description || item.account_code || '—'}</td>
+                    <td className={tdCls}>{getAccount(item)?.description || item.account_code || '—'}</td>
                     <td className={tdCls}>{item.type}</td>
                     <td className={`${tdCls} text-right`}>
                       ₱
@@ -289,29 +306,14 @@ export default function OfficialReceiptGeneration({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormInput
-              id="or-number"
-              label="OR Number"
-              value={orNumber}
-              onChange={setOrNumber}
-              placeholder="e.g., OR-2026-00001"
-              required
-            />
-
-            <div className="space-y-1.5">
-              <label htmlFor="or-date" className="block text-sm font-medium text-foreground">
-                OR Date <span className="text-error ml-1">*</span>
-              </label>
-              <input
-                id="or-date"
-                type="date"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
-                value={orDate}
-                onChange={(e) => setOrDate(e.target.value)}
-              />
-            </div>
-          </div>
+          <FormInput
+            id="or-number"
+            label="OR Number"
+            value={orNumber}
+            onChange={setOrNumber}
+            placeholder="e.g., OR-2026-00001"
+            required
+          />
 
           <FormInput
             id="payor"

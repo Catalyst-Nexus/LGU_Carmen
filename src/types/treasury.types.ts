@@ -140,12 +140,11 @@ export interface UpdateTreasuryAccountCodePayload {
 export interface TreasuryOfficialReceipt {
   id: string;
   or_number: string;
-  or_date: string;
   payor: string;
   type: string;
   amount: number;
+  account_code: string;
   account_code_id: string;
-  account_code?: string;
   is_printed: boolean;
   printed_at: string | null;
   created_at: string;
@@ -154,9 +153,9 @@ export interface TreasuryOfficialReceipt {
 
 export interface CreateTreasuryOfficialReceiptPayload {
   or_number: string;
-  or_date: string;
   payor: string;
   type: string;
   amount: number;
+  account_code: string;
   account_code_id: string;
 }

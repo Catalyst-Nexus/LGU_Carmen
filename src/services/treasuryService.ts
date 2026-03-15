@@ -523,7 +523,7 @@ export async function getTreasuryOfficialReceipts() {
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema('treasury')
-    .from('official_receipts')
+    .from('receipts')
     .select(`
       *,
       account:account_code_id(*)
@@ -553,7 +553,7 @@ export async function createTreasuryOfficialReceipt(payload: CreateTreasuryOffic
 
   const { data, error } = await (supabase as NonNullable<typeof supabase>)
     .schema('treasury')
-    .from('official_receipts')
+    .from('receipts')
     .insert(insertData)
     .select(`
       *,

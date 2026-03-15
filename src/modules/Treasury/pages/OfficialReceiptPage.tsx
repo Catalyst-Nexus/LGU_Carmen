@@ -42,11 +42,8 @@ export default function OfficialReceiptPage() {
       setLoadingReceipts(true);
       const { data, error } = await supabase
         .schema('treasury')
-        .from('official_receipts')
-        .select(`
-          *,
-          account:account_code_id(*)
-        `)
+        .from('receipts')
+        .select('*')
         .order('created_at', { ascending: false });
 
       setLoadingReceipts(false);
