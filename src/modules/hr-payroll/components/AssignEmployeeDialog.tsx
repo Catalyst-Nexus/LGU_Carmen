@@ -5,7 +5,7 @@ import {
   assignEmployeeToPosition,
   fetchUnassignedPersonnel,
   type UnassignedPersonnel,
-} from "@/services/hrService";
+} from "../services/hrService";
 
 interface AssignEmployeeDialogProps {
   open: boolean;
@@ -105,7 +105,7 @@ const AssignEmployeeDialog = ({
         <input
           type="text"
           placeholder="Search by name..."
-          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+          className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -136,7 +136,7 @@ const AssignEmployeeDialog = ({
                 onClick={() => setSelectedId(p.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/50 ${
                   selectedId === p.id
-                    ? "bg-success/10 text-success font-medium"
+                    ? "bg-accent/10 text-accent font-medium"
                     : "text-foreground"
                 }`}
               >
@@ -157,7 +157,7 @@ const AssignEmployeeDialog = ({
       </div>
 
       {selectedPerson && (
-        <p className="mt-2 text-xs text-success">
+        <p className="mt-2 text-xs text-accent">
           Selected:{" "}
           <strong>
             {selectedPerson.last_name}, {selectedPerson.first_name}

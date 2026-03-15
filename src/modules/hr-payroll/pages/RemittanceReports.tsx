@@ -1,19 +1,24 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  PageHeader,
-  StatsRow,
+  PageShell,
+  Section,
   StatCard,
-  ActionsBar,
-  PrimaryButton,
-  DataTable,
-  Tabs,
-} from "@/components/ui";
-import { Send, RefreshCw, Download } from "lucide-react";
+  GhostButton,
+  TabBar,
+  PayrollBadge,
+  Card,
+  fmtPeso,
+  EmptyState,
+  usePagination,
+  Pagination,
+  EmptyRows,
+} from "../components/ui";
+import { Send, Download, Search } from "lucide-react";
 import type { DeductionType } from "@/types/hr.types";
 import {
   fetchDeductionTypes,
   fetchRemittanceSummary,
-} from "@/services/hrService";
+} from "../services/hrService";
 
 interface RemittanceRow {
   id: string;
@@ -63,15 +68,17 @@ const RemittanceReports = () => {
           const periodEnd = (psObj?.period_end ?? "") as string;
           return {
             id: r.id as string,
-            code: dtObj?.code ?? "—",
-            description: dtObj?.description ?? "—",
+            code: dtObj?.code ?? "---",
+            description: dtObj?.description ?? "---",
             employee_name: perObj
               ? `${perObj.last_name}, ${perObj.first_name}`
-              : "—",
+              : "---",
             period:
-              periodStart && periodEnd ? `${periodStart} – ${periodEnd}` : "—",
+              periodStart && periodEnd
+                ? `${periodStart} -- ${periodEnd}`
+                : "---",
             amount: Number(r.amount) || 0,
-            pay_slip_status: (psObj?.status as string) ?? "—",
+            pay_slip_status: (psObj?.status as string) ?? "---",
           };
         },
       );
@@ -93,10 +100,14 @@ const RemittanceReports = () => {
 
   const tabList = useMemo(
     () => [
-      { id: "all", label: "All" },
-      ...mandatoryTypes.map((dt) => ({ id: dt.code, label: dt.description })),
+      { id: "all", label: "All", count: rows.length },
+      ...mandatoryTypes.map((dt) => ({
+        id: dt.code,
+        label: dt.description,
+        count: rows.filter((r) => r.code === dt.code).length,
+      })),
     ],
-    [mandatoryTypes],
+    [mandatoryTypes, rows],
   );
 
   const filtered = useMemo(() => {
@@ -110,6 +121,8 @@ const RemittanceReports = () => {
     });
   }, [rows, search, activeTab]);
 
+  const { page, setPage, totalPages, pageItems, emptyRows, totalItems } = usePagination(filtered);
+
   // Compute totals per mandatory type for stat cards
   const statTotals = useMemo(() => {
     const map: Record<string, number> = {};
@@ -120,78 +133,135 @@ const RemittanceReports = () => {
   }, [rows]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Remittance Reports"
-        subtitle="Government mandatory remittances — GSIS, PhilHealth, Pag-IBIG, BIR"
-        icon={<Send className="w-6 h-6" />}
-      />
-
-      <StatsRow>
-        {mandatoryTypes.slice(0, 4).map((dt) => (
-          <StatCard
-            key={dt.code}
-            label={dt.description}
-            value={`₱${(statTotals[dt.code] || 0).toLocaleString()}`}
-          />
-        ))}
-      </StatsRow>
-
-      <Tabs tabs={tabList} activeTab={activeTab} onTabChange={setActiveTab} />
-
-      <ActionsBar>
-        <PrimaryButton onClick={loadData}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </PrimaryButton>
-        <PrimaryButton onClick={() => {}}>
-          <Download className="w-4 h-4" />
+    <PageShell
+      title="Remittance Reports"
+      subtitle="Government mandatory remittances -- GSIS, PhilHealth, Pag-IBIG, BIR"
+      onRefresh={loadData}
+      isLoading={isLoading}
+      actions={
+        <GhostButton onClick={() => {}} disabled={filtered.length === 0}>
+          <Download className="w-3.5 h-3.5" />
           Export
-        </PrimaryButton>
-      </ActionsBar>
+        </GhostButton>
+      }
+    >
+      {/* Stats Grid -- 2-col mobile, 4-col desktop */}
+      <Section title="Totals by Agency">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {mandatoryTypes.slice(0, 4).map((dt) => (
+            <StatCard
+              key={dt.code}
+              label={dt.description}
+              value={fmtPeso(statTotals[dt.code] || 0)}
+              icon={<Send className="w-4 h-4" />}
+              accent="text-accent"
+            />
+          ))}
+        </div>
+      </Section>
 
-      <DataTable<RemittanceRow>
-        data={filtered}
-        columns={[
-          { key: "code", header: "Type" },
-          { key: "description", header: "Description" },
-          { key: "employee_name", header: "Employee" },
-          { key: "period", header: "Period" },
-          {
-            key: "amount",
-            header: "Amount",
-            render: (item) => (
-              <span className="font-bold">₱{item.amount.toLocaleString()}</span>
-            ),
-          },
-          {
-            key: "pay_slip_status",
-            header: "Slip Status",
-            render: (item) => (
-              <span
-                className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                  item.pay_slip_status === "released"
-                    ? "bg-success/10 text-success"
-                    : item.pay_slip_status === "approved"
-                      ? "bg-blue-500/10 text-blue-500"
-                      : item.pay_slip_status === "computed"
-                        ? "bg-purple-500/10 text-purple-500"
-                        : "bg-warning/10 text-warning"
-                }`}
-              >
-                {item.pay_slip_status.charAt(0).toUpperCase() +
-                  item.pay_slip_status.slice(1)}
-              </span>
-            ),
-          },
-        ]}
-        title={`Remittances (${filtered.length})`}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by type or employee..."
-        emptyMessage="No remittance records found."
-      />
-    </div>
+      {/* Tab Bar for deduction-type filtering */}
+      <TabBar tabs={tabList} active={activeTab} onChange={setActiveTab} />
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by type or employee..."
+          className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+        />
+      </div>
+
+      {/* Responsive Table */}
+      <Card>
+        {filtered.length === 0 ? (
+          <EmptyState message="No remittance records found." />
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Description
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Employee
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Period
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider text-right">
+                      Amount
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Slip Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pageItems.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="hover:bg-accent/5 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {r.code}
+                      </td>
+                      <td className="px-4 py-3 text-muted">{r.description}</td>
+                      <td className="px-4 py-3 text-foreground">
+                        {r.employee_name}
+                      </td>
+                      <td className="px-4 py-3 text-muted">{r.period}</td>
+                      <td className="px-4 py-3 text-right font-bold text-accent tabular-nums">
+                        {fmtPeso(r.amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <PayrollBadge status={r.pay_slip_status} />
+                      </td>
+                    </tr>
+                  ))}
+                  <EmptyRows count={emptyRows} columns={6} />
+                </tbody>
+              </table>
+              <Pagination page={page} totalPages={totalPages} totalItems={totalItems} onPageChange={setPage} />
+            </div>
+
+            {/* Mobile Card List */}
+            <div className="md:hidden divide-y divide-border">
+              {pageItems.map((r) => (
+                <div key={r.id} className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground text-sm leading-tight">
+                        {r.employee_name}
+                      </p>
+                      <p className="text-xs text-muted mt-0.5">
+                        {r.code} &middot; {r.description}
+                      </p>
+                    </div>
+                    <PayrollBadge status={r.pay_slip_status} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted">{r.period}</p>
+                    <p className="text-sm font-bold text-accent tabular-nums">
+                      {fmtPeso(r.amount)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
+    </PageShell>
   );
 };
 

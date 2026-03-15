@@ -5,7 +5,7 @@ import {
   fetchTimeSlotSchedules,
   fetchPersonnelForLeave,
   insertTimeRecord,
-} from "@/services/hrService";
+} from "../services/hrService";
 import { LogIn, LogOut } from "lucide-react";
 
 interface TimeRecordDialogProps {
@@ -194,8 +194,8 @@ const TimeRecordDialog = ({
                   onClick={() => setSelectedSlot(slot.id)}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
                     selectedSlot === slot.id
-                      ? "border-success bg-success/10 text-success font-semibold"
-                      : "border-border bg-background text-foreground hover:border-success/50"
+                      ? "border-accent bg-accent/10 text-accent font-semibold"
+                      : "border-border bg-background text-foreground hover:border-accent/50"
                   }`}
                 >
                   <span className="capitalize">
@@ -217,7 +217,7 @@ const TimeRecordDialog = ({
           </label>
           <input
             type="text"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground placeholder:text-muted focus:outline-none focus:border-accent"
             placeholder="Search employee..."
             value={employeeId ? selectedEmployeeName : employeeSearch}
             onChange={(e) => {
@@ -259,7 +259,7 @@ const TimeRecordDialog = ({
             <input
               id="tr-date"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
@@ -274,7 +274,7 @@ const TimeRecordDialog = ({
             <input
               id="tr-time"
               type="time"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={time}
               onChange={(e) => setTime(e.target.value)}
             />

@@ -1,22 +1,31 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  PageHeader,
-  StatsRow,
+  PageShell,
   StatCard,
-  ActionsBar,
-  PrimaryButton,
-  DataTable,
-  IconButton,
-} from "@/components/ui";
+  AccentButton,
+  Badge,
+  Card,
+  ConfirmModal,
+  DropdownMenu,
+  EmptyState,
+  fmtPeso,
+  usePagination,
+  Pagination,
+  EmptyRows,
+} from "../components/ui";
 import {
   LayoutList,
   Plus,
-  RefreshCw,
   Pencil,
   UserPlus,
   UserMinus,
   Trash2,
   MoreHorizontal,
+  Search,
+  Users,
+  CheckCircle,
+  XCircle,
+  TrendingUp,
 } from "lucide-react";
 import type { PlantillaPosition } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
@@ -25,11 +34,13 @@ import {
   updatePosition,
   deletePosition,
   unassignEmployeeFromPosition,
-} from "@/services/hrService";
-import type { PlantillaPositionFormData } from "@/services/hrService";
+} from "../services/hrService";
+import type { PlantillaPositionFormData } from "../services/hrService";
 import PositionDialog from "../components/PositionDialog";
 import type { PositionFormData } from "../components/PositionDialog";
 import AssignEmployeeDialog from "../components/AssignEmployeeDialog";
+
+/* ── Types ────────────────────────────────────────────────────────── */
 
 interface PositionRow {
   id: string;
@@ -65,6 +76,8 @@ interface PositionRow {
   pos_type: { description: string }[] | { description: string } | null;
   personnel: { id: string; first_name: string; last_name: string }[] | null;
 }
+
+/* ── Data fetching ────────────────────────────────────────────────── */
 
 const fetchPositions = async (): Promise<PlantillaPosition[]> => {
   if (!isSupabaseConfigured() || !supabase) return [];
@@ -106,7 +119,7 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
 
     const sgLabel = rate?.sg_number
       ? `SG-${rate.sg_number} Step ${rate.step ?? 1}`
-      : (salaryRate?.description ?? "—");
+      : (salaryRate?.description ?? "\u2014");
     const monthlyAmount = rate?.amount ?? 0;
 
     return {
@@ -115,13 +128,13 @@ const fetchPositions = async (): Promise<PlantillaPosition[]> => {
       position_title: row.description,
       salary_grade: sgLabel,
       monthly_salary: monthlyAmount,
-      authorization: row.authorization ?? "—",
+      authorization: row.authorization ?? "\u2014",
       funding_source: row.funding_source ?? null,
       office_id: office?.id ?? "",
       office_name: office?.description ?? "Unassigned",
       sr_id: row.sr_id ?? "",
       pt_id: row.pt_id ?? "",
-      pos_type: posType?.description ?? "—",
+      pos_type: posType?.description ?? "\u2014",
       is_filled: row.is_filled,
       is_active: row.is_active,
       incumbent_name: incumbent
@@ -168,6 +181,8 @@ const toServiceData = (
     : {}),
   ...(formData.slots ? { slots: formData.slots } : {}),
 });
+
+/* ── Component ────────────────────────────────────────────────────── */
 
 const PlantillaPositions = () => {
   const [positions, setPositions] = useState<PlantillaPosition[]>([]);
@@ -275,202 +290,336 @@ const PlantillaPositions = () => {
     ? (positions.find((p) => p.id === confirmUnassignId) ?? null)
     : null;
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Plantilla of Positions"
-        subtitle="Authorized positions per DBM-approved plantilla"
-        icon={<LayoutList className="w-6 h-6" />}
-      />
+  const filtered = positions.filter(
+    (p) =>
+      p.position_title.toLowerCase().includes(search.toLowerCase()) ||
+      p.item_number.toLowerCase().includes(search.toLowerCase()) ||
+      p.office_name.toLowerCase().includes(search.toLowerCase()),
+  );
 
-      <StatsRow>
-        <StatCard label="Total Positions" value={positions.length} />
+  const { page, setPage, totalPages, pageItems, emptyRows, totalItems } = usePagination(filtered);
+
+  const filledCount = positions.filter((p) => p.is_filled).length;
+  const vacantCount = positions.filter((p) => !p.is_filled).length;
+  const fillRate = positions.length
+    ? `${Math.round((filledCount / positions.length) * 100)}%`
+    : "0%";
+
+  /* ── Render helpers ───────────────────────────────────────────────── */
+
+  const SlotBadge = ({ info }: { info: string }) => {
+    const [filled, total] = info.split("/").map(Number);
+    return (
+      <Badge label={info} variant={filled === total ? "accent" : "warning"} />
+    );
+  };
+
+  const StatusBadge = ({ isFilled }: { isFilled: boolean }) => (
+    <Badge
+      label={isFilled ? "Filled" : "Vacant"}
+      variant={isFilled ? "success" : "danger"}
+    />
+  );
+
+  const FundingBadge = ({ source }: { source: string | null }) =>
+    source ? (
+      <Badge label={source} variant="info" />
+    ) : (
+      <span className="text-muted text-xs">{"\u2014"}</span>
+    );
+
+  const ActionsMenu = ({ item }: { item: PlantillaPosition }) => {
+    const menuItems = [
+      {
+        label: "Edit Position",
+        icon: <Pencil className="w-4 h-4" />,
+        onClick: () => {
+          setEditingPosition(item);
+          setOpenMenuId(null);
+        },
+      },
+      ...(!item.is_filled
+        ? [
+            {
+              label: "Assign Employee",
+              icon: <UserPlus className="w-4 h-4" />,
+              onClick: () => {
+                setAssignTarget(item);
+                setOpenMenuId(null);
+              },
+              variant: "success" as const,
+            },
+          ]
+        : [
+            {
+              label: "Unassign Incumbent",
+              icon: <UserMinus className="w-4 h-4" />,
+              onClick: () => {
+                setConfirmUnassignId(item.id);
+                setOpenMenuId(null);
+              },
+              variant: "warning" as const,
+            },
+          ]),
+      ...(!item.is_filled
+        ? [
+            {
+              label: "Delete Position",
+              icon: <Trash2 className="w-4 h-4" />,
+              onClick: () => {
+                setConfirmDeleteId(item.id);
+                setOpenMenuId(null);
+              },
+              variant: "danger" as const,
+            },
+          ]
+        : []),
+    ];
+
+    return (
+      <div className="relative" ref={openMenuId === item.id ? menuRef : null}>
+        <button
+          onClick={() =>
+            setOpenMenuId((prev) => (prev === item.id ? null : item.id))
+          }
+          className="p-1.5 rounded-lg hover:bg-muted/20 transition-colors text-muted hover:text-foreground"
+          title="Actions"
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+        {openMenuId === item.id && <DropdownMenu items={menuItems} />}
+      </div>
+    );
+  };
+
+  /* ── Main render ──────────────────────────────────────────────────── */
+
+  return (
+    <PageShell
+      title="Plantilla of Positions"
+      subtitle="Authorized positions per DBM-approved plantilla"
+      onRefresh={loadPositions}
+      isLoading={isLoading}
+      actions={
+        <AccentButton onClick={() => setShowAddDialog(true)}>
+          <Plus className="w-4 h-4" />
+          Add Position
+        </AccentButton>
+      }
+    >
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard
+          label="Total Positions"
+          value={positions.length}
+          icon={<Users className="w-5 h-5" />}
+        />
         <StatCard
           label="Filled"
-          value={positions.filter((p) => p.is_filled).length}
-          color="success"
+          value={filledCount}
+          icon={<CheckCircle className="w-5 h-5" />}
+          accent="text-accent"
         />
         <StatCard
           label="Vacant"
-          value={positions.filter((p) => !p.is_filled).length}
-          color="danger"
+          value={vacantCount}
+          icon={<XCircle className="w-5 h-5" />}
+          accent="text-red-500 dark:text-red-400"
         />
         <StatCard
           label="Fill Rate"
-          value={
-            positions.length
-              ? `${Math.round((positions.filter((p) => p.is_filled).length / positions.length) * 100)}%`
-              : "0%"
-          }
+          value={fillRate}
+          icon={<TrendingUp className="w-5 h-5" />}
+          accent="text-accent"
         />
-      </StatsRow>
+      </div>
 
-      <ActionsBar>
-        <PrimaryButton onClick={() => setShowAddDialog(true)}>
-          <Plus className="w-4 h-4" />
-          Add Position
-        </PrimaryButton>
-        <PrimaryButton onClick={loadPositions} disabled={isLoading}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </PrimaryButton>
-      </ActionsBar>
+      {/* Search */}
+      <Card className="p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by item no., position, or office..."
+            className="w-full pl-9 pr-4 py-2 text-sm bg-transparent border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 text-foreground placeholder:text-muted transition-colors"
+          />
+        </div>
+      </Card>
 
-      <DataTable<PlantillaPosition>
-        data={positions.filter(
-          (p) =>
-            p.position_title.toLowerCase().includes(search.toLowerCase()) ||
-            p.item_number.toLowerCase().includes(search.toLowerCase()) ||
-            p.office_name.toLowerCase().includes(search.toLowerCase()),
-        )}
-        columns={[
-          { key: "item_number", header: "Item No." },
-          { key: "position_title", header: "Position Title" },
-          {
-            key: "slot_info",
-            header: "Slots",
-            render: (item) => {
-              const [filled, total] = item.slot_info.split("/").map(Number);
-              return (
-                <span
-                  className={`text-xs font-medium ${filled === total ? "text-success" : "text-warning"}`}
-                >
-                  {item.slot_info}
-                </span>
-              );
-            },
-          },
-          { key: "salary_grade", header: "SG / Step" },
-          {
-            key: "monthly_salary",
-            header: "Monthly Salary",
-            render: (item) => (
-              <span>
-                {item.monthly_salary
-                  ? new Intl.NumberFormat("en-PH", {
-                      style: "currency",
-                      currency: "PHP",
-                    }).format(item.monthly_salary)
-                  : "—"}
-              </span>
-            ),
-          },
-          { key: "authorization", header: "Authorization" },
-          {
-            key: "funding_source",
-            header: "Fund Source",
-            render: (item) =>
-              item.funding_source ? (
-                <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
-                  {item.funding_source}
-                </span>
-              ) : (
-                <span className="text-muted-foreground text-xs">—</span>
-              ),
-          },
-          { key: "office_name", header: "Office" },
-          { key: "pos_type", header: "Type" },
-          {
-            key: "is_filled",
-            header: "Status",
-            render: (item) => (
-              <span
-                className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                  item.is_filled
-                    ? "bg-success/10 text-success"
-                    : "bg-danger/10 text-danger"
-                }`}
-              >
-                {item.is_filled ? "Filled" : "Vacant"}
-              </span>
-            ),
-          },
-          {
-            key: "incumbent_name",
-            header: "Incumbent",
-            render: (item) => <span>{item.incumbent_name ?? "—"}</span>,
-          },
-          {
-            key: "id",
-            header: "Actions",
-            render: (item) => (
-              <div
-                className="relative"
-                ref={openMenuId === item.id ? menuRef : null}
-              >
-                <IconButton
-                  onClick={() =>
-                    setOpenMenuId((prev) => (prev === item.id ? null : item.id))
-                  }
-                  title="Actions"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </IconButton>
-
-                {openMenuId === item.id && (
-                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-background border border-border rounded-lg shadow-lg py-1 text-sm">
-                    <button
-                      onClick={() => {
-                        setEditingPosition(item);
-                        setOpenMenuId(null);
-                      }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+      {/* Data Table / Cards */}
+      <Card>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<LayoutList className="w-10 h-10 mb-2 opacity-40" />}
+            message="No positions found."
+          />
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Item No.
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Position Title
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Slots
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      SG / Step
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Monthly Salary
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Authorization
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Fund Source
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Office
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Type
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider">
+                      Incumbent
+                    </th>
+                    <th className="px-4 py-3 font-semibold text-muted text-xs uppercase tracking-wider text-right">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pageItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-muted/5 transition-colors"
                     >
-                      <Pencil className="w-4 h-4" />
-                      Edit Position
-                    </button>
+                      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
+                        {item.item_number}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {item.position_title}
+                      </td>
+                      <td className="px-4 py-3">
+                        <SlotBadge info={item.slot_info} />
+                      </td>
+                      <td className="px-4 py-3 text-foreground whitespace-nowrap">
+                        {item.salary_grade}
+                      </td>
+                      <td className="px-4 py-3 text-foreground tabular-nums whitespace-nowrap">
+                        {item.monthly_salary
+                          ? fmtPeso(item.monthly_salary)
+                          : "\u2014"}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {item.authorization}
+                      </td>
+                      <td className="px-4 py-3">
+                        <FundingBadge source={item.funding_source} />
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {item.office_name}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {item.pos_type}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge isFilled={item.is_filled} />
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {item.incumbent_name ?? "\u2014"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <ActionsMenu item={item} />
+                      </td>
+                    </tr>
+                  ))}
+                  <EmptyRows count={emptyRows} columns={12} />
+                </tbody>
+              </table>
+            </div>
 
-                    {!item.is_filled ? (
-                      <button
-                        onClick={() => {
-                          setAssignTarget(item);
-                          setOpenMenuId(null);
-                        }}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-success/10 text-success transition-colors"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                        Assign Employee
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setConfirmUnassignId(item.id);
-                          setOpenMenuId(null);
-                        }}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-warning/10 text-warning transition-colors"
-                      >
-                        <UserMinus className="w-4 h-4" />
-                        Unassign Incumbent
-                      </button>
-                    )}
-
-                    {!item.is_filled && (
-                      <>
-                        <div className="border-t border-border my-1" />
-                        <button
-                          onClick={() => {
-                            setConfirmDeleteId(item.id);
-                            setOpenMenuId(null);
-                          }}
-                          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-danger/10 text-danger transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete Position
-                        </button>
-                      </>
-                    )}
+            {/* Mobile card list */}
+            <div className="lg:hidden divide-y divide-border">
+              {pageItems.map((item) => (
+                <div key={item.id} className="p-4 space-y-3">
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground truncate">
+                        {item.position_title}
+                      </p>
+                      <p className="text-xs text-muted mt-0.5">
+                        {item.item_number} &middot; {item.office_name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <StatusBadge isFilled={item.is_filled} />
+                      <ActionsMenu item={item} />
+                    </div>
                   </div>
-                )}
-              </div>
-            ),
-          },
-        ]}
-        title="Plantilla Positions"
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by item no., position, or office..."
-        emptyMessage="No positions found."
-      />
+
+                  {/* Detail grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <span className="text-xs text-muted">SG / Step</span>
+                      <p className="text-foreground">{item.salary_grade}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted">Monthly Salary</span>
+                      <p className="text-foreground tabular-nums">
+                        {item.monthly_salary
+                          ? fmtPeso(item.monthly_salary)
+                          : "\u2014"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted">Slots</span>
+                      <p>
+                        <SlotBadge info={item.slot_info} />
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted">Type</span>
+                      <p className="text-foreground">{item.pos_type}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted">Authorization</span>
+                      <p className="text-foreground">{item.authorization}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted">Fund Source</span>
+                      <p>
+                        <FundingBadge source={item.funding_source} />
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-xs text-muted">Incumbent</span>
+                      <p className="text-foreground">
+                        {item.incumbent_name ?? "\u2014"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} onPageChange={setPage} />
+          </>
+        )}
+      </Card>
 
       {/* Add Position Dialog */}
       <PositionDialog
@@ -498,75 +647,49 @@ const PlantillaPositions = () => {
       />
 
       {/* Confirm Unassign Modal */}
-      {confirmUnassignId && unassignTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-background border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
-            <h3 className="text-base font-semibold text-foreground">
-              Unassign Incumbent?
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              This will remove{" "}
-              <strong className="text-foreground">
-                {unassignTarget.incumbent_name}
-              </strong>{" "}
-              from{" "}
-              <strong className="text-foreground">
-                {unassignTarget.position_title}
-              </strong>{" "}
-              ({unassignTarget.item_number}). The position will become vacant.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmUnassignId(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted/50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleUnassign(unassignTarget)}
-                disabled={isSaving}
-                className="px-4 py-2 text-sm rounded-lg bg-warning text-white hover:bg-warning/90 transition-colors disabled:opacity-60"
-              >
-                {isSaving ? "Unassigning…" : "Unassign"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={!!confirmUnassignId && !!unassignTarget}
+        title="Unassign Incumbent?"
+        confirmLabel="Unassign"
+        confirmVariant="warning"
+        isLoading={isSaving}
+        onConfirm={() => unassignTarget && handleUnassign(unassignTarget)}
+        onCancel={() => setConfirmUnassignId(null)}
+      >
+        {unassignTarget && (
+          <p>
+            This will remove{" "}
+            <strong className="text-foreground">
+              {unassignTarget.incumbent_name}
+            </strong>{" "}
+            from{" "}
+            <strong className="text-foreground">
+              {unassignTarget.position_title}
+            </strong>{" "}
+            ({unassignTarget.item_number}). The position will become vacant.
+          </p>
+        )}
+      </ConfirmModal>
 
       {/* Confirm Delete Modal */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-background border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
-            <h3 className="text-base font-semibold text-foreground">
-              Delete Position?
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              This will permanently delete{" "}
-              <strong className="text-foreground">
-                {positions.find((p) => p.id === confirmDeleteId)?.item_number}
-              </strong>
-              . This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted/50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={isSaving}
-                className="px-4 py-2 text-sm rounded-lg bg-danger text-white hover:bg-danger/90 transition-colors disabled:opacity-60"
-              >
-                {isSaving ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <ConfirmModal
+        open={!!confirmDeleteId}
+        title="Delete Position?"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        isLoading={isSaving}
+        onConfirm={() => confirmDeleteId && handleDelete(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      >
+        <p>
+          This will permanently delete{" "}
+          <strong className="text-foreground">
+            {positions.find((p) => p.id === confirmDeleteId)?.item_number}
+          </strong>
+          . This action cannot be undone.
+        </p>
+      </ConfirmModal>
+    </PageShell>
   );
 };
 

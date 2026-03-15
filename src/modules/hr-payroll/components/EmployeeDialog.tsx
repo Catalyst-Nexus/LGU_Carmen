@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { BaseDialog, FormInput } from "@/components/ui/dialog";
 import type { Employee } from "@/types/hr.types";
-import type { Office, Position, EmployeeFormData } from "@/services/hrService";
-import { fetchOffices, fetchPositions } from "@/services/hrService";
+import type { Office, Position, EmployeeFormData } from "../services/hrService";
+import { fetchOffices, fetchPositions } from "../services/hrService";
 
 interface EmployeeDialogProps {
   open: boolean;
@@ -37,7 +37,7 @@ const FormSelect = ({
     </label>
     <select
       id={id}
-      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+      className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={required}
@@ -50,7 +50,7 @@ const FormSelect = ({
 
 /* ── Section heading inside the dialog ────────────────────────────── */
 const SectionHeading = ({ children }: { children: React.ReactNode }) => (
-  <h3 className="text-sm font-semibold text-success uppercase tracking-wider pt-4 pb-1 border-b border-border mb-3">
+  <h3 className="text-sm font-semibold text-accent uppercase tracking-wider pt-4 pb-1 border-b border-border mb-3">
     {children}
   </h3>
 );
@@ -295,7 +295,7 @@ const EmployeeDialog = ({
             <input
               id="birth-date"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
             />
@@ -469,7 +469,7 @@ const EmployeeDialog = ({
             <input
               id="date-hired"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={dateHired}
               onChange={(e) => setDateHired(e.target.value)}
               required
@@ -502,7 +502,7 @@ const EmployeeDialog = ({
             <input
               id="date-assumed"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={dateAssumed}
               onChange={(e) => setDateAssumed(e.target.value)}
             />
@@ -531,7 +531,7 @@ const EmployeeDialog = ({
           <input
             id="is-active"
             type="checkbox"
-            className="w-4 h-4 border border-border rounded text-success focus:ring-success"
+            className="w-4 h-4 border border-border rounded text-accent focus:ring-accent/30"
             checked={isActive}
             onChange={(e) => setIsActive(e.target.checked)}
           />

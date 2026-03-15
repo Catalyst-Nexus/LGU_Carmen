@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { PageHeader } from "@/components/ui";
+import { PageShell, Card } from "../components/ui";
 import {
   Camera,
   UserCheck,
@@ -24,7 +24,7 @@ import {
   type ClockResult,
   type MatchResult,
 } from "@/services/faceService";
-import { fetchTimeSlotSchedules } from "@/services/hrService";
+import { fetchTimeSlotSchedules } from "../services/hrService";
 import type { TimeSlotSchedule } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
 
@@ -184,7 +184,9 @@ const TimeClock = () => {
       if (!matchedPerson || chosenType === null) return;
 
       setStatus("clocking");
-      setMessage(`Recording ${chosenType === 1 ? "IN" : "OUT"} — ${slot.description.replace(/_/g, " ")}…`);
+      setMessage(
+        `Recording ${chosenType === 1 ? "IN" : "OUT"} — ${slot.description.replace(/_/g, " ")}…`,
+      );
 
       const result = await clockPerson(
         matchedPerson.per_id,
@@ -328,35 +330,34 @@ const TimeClock = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Time Clock"
-        subtitle="Facial Recognition Time-In / Time-Out"
-        icon={<Camera className="w-6 h-6" />}
-      />
-
+    <PageShell
+      title="Time Clock"
+      subtitle="Facial Recognition Time-In / Time-Out"
+    >
       {/* Live Clock */}
-      <div className="flex items-center justify-between bg-surface border border-border rounded-xl p-4">
-        <div className="flex items-center gap-3">
-          <Clock className="w-5 h-5 text-success" />
-          <div>
-            <span className="text-2xl font-bold text-foreground tabular-nums">
-              {currentTime.toLocaleTimeString("en-PH", { hour12: true })}
-            </span>
-            <span className="ml-3 text-sm text-muted">
-              {currentTime.toLocaleDateString("en-PH", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </span>
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Clock className="w-5 h-5 text-accent" />
+            <div>
+              <span className="text-2xl font-bold text-foreground tabular-nums">
+                {currentTime.toLocaleTimeString("en-PH", { hour12: true })}
+              </span>
+              <span className="ml-3 text-sm text-muted">
+                {currentTime.toLocaleDateString("en-PH", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
+            </div>
           </div>
+          <span className="text-sm font-medium text-accent bg-accent/10 px-3 py-1 rounded-full">
+            {currentSlotLabel()}
+          </span>
         </div>
-        <span className="text-sm font-medium text-success bg-success/10 px-3 py-1 rounded-full">
-          {currentSlotLabel()}
-        </span>
-      </div>
+      </Card>
 
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -407,12 +408,15 @@ const TimeClock = () => {
           {/* Action buttons / Selection UI */}
           <div className="mt-4 space-y-3">
             {/* Default: Scan & Enroll */}
-            {(status === "ready" || status === "loading" || status === "no-match" || status === "error") && (
+            {(status === "ready" ||
+              status === "loading" ||
+              status === "no-match" ||
+              status === "error") && (
               <div className="flex gap-3">
                 <button
                   onClick={handleScan}
                   disabled={status === "loading"}
-                  className="flex-1 flex items-center justify-center gap-2 bg-success hover:bg-success/90 text-white font-semibold py-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+                  className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-white font-semibold py-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-lg"
                 >
                   <Camera className="w-5 h-5" />
                   Scan Face
@@ -431,7 +435,7 @@ const TimeClock = () => {
             {/* Step 2: Choose IN or OUT */}
             {status === "choose-type" && matchedPerson && (
               <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-success">
+                <p className="text-center text-sm font-medium text-accent">
                   Recognized: {matchedPerson.name}
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -464,8 +468,9 @@ const TimeClock = () => {
             {/* Step 3: Choose Time Slot */}
             {status === "choose-slot" && matchedPerson && (
               <div className="space-y-3">
-                <p className="text-center text-sm font-medium text-success">
-                  {matchedPerson.name} — {chosenType === 1 ? "Time In" : "Time Out"}
+                <p className="text-center text-sm font-medium text-accent">
+                  {matchedPerson.name} —{" "}
+                  {chosenType === 1 ? "Time In" : "Time Out"}
                 </p>
                 <div className="flex flex-col gap-2">
                   {timeSlots.map((slot) => (
@@ -473,13 +478,14 @@ const TimeClock = () => {
                       key={slot.id}
                       type="button"
                       onClick={() => handleChooseSlot(slot)}
-                      className="w-full text-left px-4 py-3 rounded-xl border-2 border-border bg-background text-foreground hover:border-success hover:bg-success/5 transition-all"
+                      className="w-full text-left px-4 py-3 rounded-xl border-2 border-border bg-background text-foreground hover:border-accent hover:bg-accent/5 transition-all"
                     >
                       <span className="font-semibold capitalize">
                         {slot.description.replace(/_/g, " ")}
                       </span>
                       <span className="ml-2 text-sm text-muted">
-                        {slot.time_start.slice(0, 5)} – {slot.time_end.slice(0, 5)}
+                        {slot.time_start.slice(0, 5)} –{" "}
+                        {slot.time_end.slice(0, 5)}
                       </span>
                     </button>
                   ))}
@@ -506,7 +512,7 @@ const TimeClock = () => {
         {/* Status Panel */}
         <div className="space-y-4">
           {/* Status Card */}
-          <div className="bg-surface border border-border rounded-xl p-5">
+          <Card className="p-5">
             <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
               Status
             </h3>
@@ -516,11 +522,11 @@ const TimeClock = () => {
                 {message}
               </p>
             </div>
-          </div>
+          </Card>
 
           {/* Enrollment Panel */}
           {enrollMode && (
-            <div className="bg-surface border border-blue-500/30 rounded-xl p-5 space-y-3">
+            <Card className="p-5 space-y-3 !border-blue-500/30">
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wider">
                 Face Enrollment
               </h3>
@@ -562,11 +568,11 @@ const TimeClock = () => {
                   {enrollMsg}
                 </p>
               )}
-            </div>
+            </Card>
           )}
 
           {/* Enrolled Faces Summary */}
-          <div className="bg-surface border border-border rounded-xl p-5">
+          <Card className="p-5">
             <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
               Enrolled Faces
             </h3>
@@ -579,7 +585,7 @@ const TimeClock = () => {
                     key={e.id}
                     className="flex items-center gap-2 text-sm text-foreground"
                   >
-                    <UserCheck className="w-4 h-4 text-success shrink-0" />
+                    <UserCheck className="w-4 h-4 text-accent shrink-0" />
                     <span>
                       {e.personnel
                         ? `${e.personnel.last_name}, ${e.personnel.first_name}`
@@ -589,15 +595,15 @@ const TimeClock = () => {
                 ))}
               </ul>
             )}
-          </div>
+          </Card>
 
           {/* Last Clock Result */}
           {clockResult && (
-            <div
-              className={`border rounded-xl p-5 ${
+            <Card
+              className={`p-5 ${
                 clockResult.success
-                  ? "bg-green-500/5 border-green-500/30"
-                  : "bg-red-500/5 border-red-500/30"
+                  ? "!bg-green-500/5 !border-green-500/30"
+                  : "!bg-red-500/5 !border-red-500/30"
               }`}
             >
               <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-2">
@@ -612,11 +618,11 @@ const TimeClock = () => {
               {clockResult.error && (
                 <p className="text-xs text-red-400 mt-1">{clockResult.error}</p>
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 };
 

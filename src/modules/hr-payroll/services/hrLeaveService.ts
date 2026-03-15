@@ -4,7 +4,7 @@
  * Covers: hr.leave_out_subtype, hr.personnel_leave_credits,
  *         hr.personnel_leave_out, hr.leave_out_dates
  */
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 
 // =============================================================================
 // Interfaces
