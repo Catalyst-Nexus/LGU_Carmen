@@ -8,18 +8,28 @@ import {
   DataTable,
   Tabs,
 } from "@/components/ui";
-import { CalendarOff, Plus, RefreshCw, Check, X, Ban } from "lucide-react";
+import {
+  CalendarOff,
+  Plus,
+  RefreshCw,
+  Check,
+  X,
+  Ban,
+  CalendarDays,
+} from "lucide-react";
 import type { LeaveApplication } from "@/types/hr.types";
 import {
   createLeaveApplication,
   fetchLeaveApplications,
   updateLeaveApplication,
+  clearLeaveOutDates,
   fetchPersonnelIdByUserId,
 } from "@/services/hrService";
 import type { LeaveApplicationFormData } from "@/services/hrService";
 import { useAuthStore } from "@/store/authStore";
 import LeaveDialog from "../components/LeaveDialog";
 import type { LeaveFormData } from "../components/LeaveDialog";
+import HolidayManagerDialog from "../components/HolidayManagerDialog";
 
 const LeaveManagement = () => {
   const user = useAuthStore((s) => s.user);
@@ -29,6 +39,7 @@ const LeaveManagement = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showHolidayDialog, setShowHolidayDialog] = useState(false);
 
   const loadLeaves = useCallback(async () => {
     setIsLoading(true);
@@ -53,6 +64,8 @@ const LeaveManagement = () => {
       status: data.status,
       leave_dates: data.leave_dates,
       plc_id: data.plc_id,
+      details: data.details ?? null,
+      credit_balance_before: data.credit_balance_before ?? null,
     };
     const result = await createLeaveApplication(payload);
     setIsSaving(false);
@@ -74,6 +87,11 @@ const LeaveManagement = () => {
       updatePayload.approved_date = new Date().toISOString().split("T")[0];
       const personnelId = await fetchPersonnelIdByUserId(user.id);
       if (personnelId) updatePayload.approved_by = personnelId;
+    }
+
+    // Restore leave credits: delete the dated rows so trg_restore_leave_credit fires
+    if (status === "denied" || status === "cancelled") {
+      await clearLeaveOutDates(id);
     }
 
     const result = await updateLeaveApplication(id, updatePayload);
@@ -150,6 +168,10 @@ const LeaveManagement = () => {
           <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </PrimaryButton>
+        <PrimaryButton onClick={() => setShowHolidayDialog(true)}>
+          <CalendarDays className="w-4 h-4" />
+          Manage Holidays
+        </PrimaryButton>
       </ActionsBar>
 
       <DataTable<LeaveApplication>
@@ -160,7 +182,24 @@ const LeaveManagement = () => {
             key: "leave_type",
             header: "Type",
             render: (item) => (
-              <span title={item.leave_type_desc}>{item.leave_type}</span>
+              <div>
+                <span title={item.leave_type_desc}>{item.leave_type}</span>
+                {item.details && (
+                  <div className="text-xs text-muted mt-0.5">
+                    {item.leave_type === "VL" &&
+                      typeof item.details.place_visited === "string" && (
+                        <span>{item.details.place_visited}</span>
+                      )}
+                    {item.leave_type === "SL" &&
+                      typeof item.details.illness === "string" && (
+                        <span>
+                          {item.details.illness}
+                          {item.details.hospitalized ? " (Hosp.)" : ""}
+                        </span>
+                      )}
+                  </div>
+                )}
+              </div>
             ),
           },
           { key: "applied_date", header: "Date Filed" },
@@ -168,6 +207,17 @@ const LeaveManagement = () => {
             key: "credits",
             header: "No. of Days",
             render: (item) => <span>{item.credits}</span>,
+          },
+          {
+            key: "credit_balance_before",
+            header: "Balance Before",
+            render: (item) => (
+              <span>
+                {item.credit_balance_before != null
+                  ? item.credit_balance_before.toFixed(3)
+                  : "—"}
+              </span>
+            ),
           },
           {
             key: "status",
@@ -261,6 +311,11 @@ const LeaveManagement = () => {
         onClose={() => setShowFileDialog(false)}
         onSubmit={handleFileLeave}
         isLoading={isSaving}
+      />
+
+      <HolidayManagerDialog
+        open={showHolidayDialog}
+        onClose={() => setShowHolidayDialog(false)}
       />
     </div>
   );

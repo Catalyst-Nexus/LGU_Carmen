@@ -9,6 +9,9 @@ import {
   FolderOpen,
   Activity,
   Plus,
+  Pencil,
+  Check,
+  XCircle,
 } from "lucide-react";
 import type {
   Employee,
@@ -22,6 +25,7 @@ import {
   fetchPersonnelPaySlips,
   fetchPersonnelDocuments,
   fetchPersonnelAuditLog,
+  updateLeaveCredit,
   type ServiceRecord,
   type LeaveCredit,
   type PersonnelDocument,
@@ -103,6 +107,15 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
   const [loadedTabs, setLoadedTabs] = useState(new Set<TabId>());
   const [showRecordDialog, setShowRecordDialog] = useState(false);
 
+  // ── Leave credit edit state ──────────────────────────────────────────────
+  const [editCreditId, setEditCreditId] = useState<string | null>(null);
+  const [editCreditForm, setEditCreditForm] = useState({
+    begin_balance: "0",
+    earned: "0",
+    current_balance: "0",
+  });
+  const [savingCredit, setSavingCredit] = useState(false);
+
   const handleRecordSaved = () => {
     setLoadedTabs((prev) => {
       const next = new Set(prev);
@@ -110,6 +123,37 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
       return next;
     });
     setShowRecordDialog(false);
+  };
+
+  // ── Leave credit edit handlers ───────────────────────────────────────────
+  const startEditCredit = (credit: LeaveCredit) => {
+    setEditCreditId(credit.id);
+    setEditCreditForm({
+      begin_balance: credit.begin_balance.toString(),
+      earned: credit.earned.toString(),
+      current_balance: credit.current_balance.toString(),
+    });
+  };
+
+  const handleSaveCredit = async () => {
+    if (!editCreditId) return;
+    setSavingCredit(true);
+    const result = await updateLeaveCredit(editCreditId, {
+      begin_balance: parseFloat(editCreditForm.begin_balance) || 0,
+      earned: parseFloat(editCreditForm.earned) || 0,
+      current_balance: parseFloat(editCreditForm.current_balance) || 0,
+    });
+    setSavingCredit(false);
+    if (result.success) {
+      setEditCreditId(null);
+      setLoadedTabs((prev) => {
+        const next = new Set(prev);
+        next.delete("leave");
+        return next;
+      });
+    } else {
+      alert(result.error || "Failed to update leave credits");
+    }
   };
 
   // Reset all tab data when the selected employee changes
@@ -474,102 +518,315 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
     );
   };
 
-  const renderLeave = () => (
-    <div className="space-y-6">
-      <div>
-        <SectionTitle>Leave Credit Balances</SectionTitle>
-        {leaveCredits.length === 0 ? (
-          <p className="text-sm text-muted">No leave credits on record.</p>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {leaveCredits.map((c) => (
-              <div
-                key={c.id}
-                className="border border-border rounded-lg p-3 bg-surface"
-              >
-                <p className="text-xs font-medium text-muted mb-1">
-                  {
-                    (c as unknown as Record<string, unknown>)
-                      .lot_description as string
-                  }
+  const renderLeave = () => {
+    return (
+      <div className="space-y-6">
+        {/* ── Leave Credit Balances ────────────────────────────────────── */}
+        <div>
+          <SectionTitle>Leave Credit Balances</SectionTitle>
+          {leaveCredits.length === 0 ? (
+            <p className="text-sm text-muted">No leave credits on record.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {leaveCredits.map((c) => (
+                <div
+                  key={c.id}
+                  className={`border rounded-lg p-3 bg-surface transition-colors ${
+                    editCreditId === c.id
+                      ? "border-warning/50"
+                      : "border-border"
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-1 gap-1">
+                    <p className="text-xs font-medium text-muted leading-tight">
+                      {c.lot_description}
+                    </p>
+                    <button
+                      onClick={() =>
+                        editCreditId === c.id
+                          ? setEditCreditId(null)
+                          : startEditCredit(c)
+                      }
+                      title="Edit credits"
+                      className="p-0.5 rounded hover:bg-muted/20 text-muted hover:text-foreground transition-colors shrink-0"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <p className="text-xl font-bold text-foreground">
+                    {c.current_balance}{" "}
+                    <span className="text-xs font-normal text-muted">days</span>
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    Earned: {c.earned} · Start: {c.begin_balance}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Inline Credit Edit Form ───────────────────────────────────── */}
+        {editCreditId &&
+          (() => {
+            const editing = leaveCredits.find((c) => c.id === editCreditId);
+            return (
+              <div className="border border-warning/40 bg-warning/5 rounded-lg p-4 space-y-3">
+                <p className="text-sm font-semibold text-foreground">
+                  Edit Credits — {editing?.lot_description}
                 </p>
-                <p className="text-xl font-bold text-foreground">
-                  {c.current_balance}{" "}
-                  <span className="text-xs font-normal text-muted">days</span>
-                </p>
-                <p className="text-xs text-muted mt-0.5">
-                  Earned: {c.earned} · Start: {c.begin_balance}
-                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {(
+                    [
+                      ["begin_balance", "Opening Balance"],
+                      ["earned", "Earned"],
+                      ["current_balance", "Current Balance"],
+                    ] as [keyof typeof editCreditForm, string][]
+                  ).map(([field, label]) => (
+                    <div key={field} className="space-y-1">
+                      <label className="block text-xs font-medium text-muted">
+                        {label}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className="w-full px-2.5 py-1.5 border border-border rounded text-sm bg-background focus:outline-none focus:border-warning"
+                        value={editCreditForm[field]}
+                        onChange={(e) =>
+                          setEditCreditForm((prev) => ({
+                            ...prev,
+                            [field]: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveCredit}
+                    disabled={savingCredit}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-60"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    {savingCredit ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    onClick={() => setEditCreditId(null)}
+                    disabled={savingCredit}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg hover:bg-muted/20 transition-colors text-muted"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div>
-        <SectionTitle>Leave Applications</SectionTitle>
-        {leaveApps.length === 0 ? (
-          <p className="text-sm text-muted">No leave applications found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left">
-                  <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
-                    Type
-                  </th>
-                  <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
-                    Applied
-                  </th>
-                  <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
-                    Days
-                  </th>
-                  <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
-                    Pay
-                  </th>
-                  <th className="pb-2 font-medium text-muted text-xs uppercase">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaveApps.map((la) => (
-                  <tr key={la.id} className="border-b border-border/50">
-                    <td className="py-2 pr-4">
-                      {la.leave_type}
-                      <span className="text-muted text-xs">
-                        {" "}
-                        ({la.leave_type_desc})
-                      </span>
-                    </td>
-                    <td className="py-2 pr-4">{la.applied_date}</td>
-                    <td className="py-2 pr-4">{la.credits}</td>
-                    <td className="py-2 pr-4">
-                      ₱{la.pay_amount.toLocaleString()}
-                    </td>
-                    <td className="py-2">
-                      <span
-                        className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${
-                          la.status === "approved"
-                            ? "bg-success/10 text-success"
-                            : la.status === "denied"
-                              ? "bg-danger/10 text-danger"
-                              : la.status === "cancelled"
-                                ? "bg-gray-500/10 text-gray-500"
-                                : "bg-warning/10 text-warning"
-                        }`}
-                      >
-                        {la.status}
-                      </span>
-                    </td>
+            );
+          })()}
+
+        {/* ── Leave Ledger (CSC Form 6 style) ──────────────────────────── */}
+        <div>
+          <SectionTitle>Leave Ledger</SectionTitle>
+          {leaveCredits.length === 0 ? (
+            <p className="text-sm text-muted">No leave credits on record.</p>
+          ) : (
+            <div className="space-y-4">
+              {leaveCredits.map((credit) => {
+                const entries = leaveApps
+                  .filter(
+                    (la) =>
+                      la.lot_id === credit.lot_id && la.status === "approved",
+                  )
+                  .slice()
+                  .sort((a, b) => a.applied_date.localeCompare(b.applied_date));
+                let running = credit.begin_balance + credit.earned;
+
+                return (
+                  <div key={credit.id}>
+                    <p className="text-xs font-semibold text-foreground mb-1.5">
+                      {credit.lot_description}
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-surface">
+                            <th className="py-1.5 pr-4 text-left font-medium text-muted uppercase tracking-wide">
+                              Date
+                            </th>
+                            <th className="py-1.5 pr-4 text-left font-medium text-muted uppercase tracking-wide">
+                              Transaction
+                            </th>
+                            <th className="py-1.5 pr-4 text-right font-medium text-muted uppercase tracking-wide">
+                              Used
+                            </th>
+                            <th className="py-1.5 text-right font-medium text-muted uppercase tracking-wide">
+                              Balance
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {/* Opening row */}
+                          <tr className="border-b border-border/40 bg-success/5">
+                            <td className="py-1.5 pr-4 text-muted">—</td>
+                            <td className="py-1.5 pr-4 font-medium text-foreground">
+                              Opening Balance
+                              <span className="ml-1 text-muted font-normal">
+                                (Start: {credit.begin_balance.toFixed(3)} +
+                                Earned: {credit.earned.toFixed(3)})
+                              </span>
+                            </td>
+                            <td className="py-1.5 pr-4 text-right text-muted">
+                              —
+                            </td>
+                            <td className="py-1.5 text-right font-bold text-foreground">
+                              {(credit.begin_balance + credit.earned).toFixed(
+                                3,
+                              )}
+                            </td>
+                          </tr>
+
+                          {/* Approved leave entries */}
+                          {entries.map((la) => {
+                            running -= la.credits;
+                            return (
+                              <tr
+                                key={la.id}
+                                className="border-b border-border/40 hover:bg-surface"
+                              >
+                                <td className="py-1.5 pr-4 text-muted">
+                                  {la.applied_date}
+                                </td>
+                                <td className="py-1.5 pr-4">
+                                  <span className="font-medium">
+                                    {la.leave_type}
+                                  </span>
+                                  <span className="ml-1 text-muted">
+                                    — {la.leave_type_desc}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 pr-4 text-right text-danger">
+                                  ({la.credits.toFixed(3)})
+                                </td>
+                                <td
+                                  className={`py-1.5 text-right font-semibold ${
+                                    running < 0
+                                      ? "text-danger"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {running.toFixed(3)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+
+                          {entries.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={4}
+                                className="py-3 text-center text-muted italic"
+                              >
+                                No approved leaves on record.
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Closing balance row */}
+                          {entries.length > 0 && (
+                            <tr className="border-t border-border bg-surface">
+                              <td
+                                colSpan={3}
+                                className="py-1.5 pr-4 font-semibold text-foreground"
+                              >
+                                Closing Balance
+                              </td>
+                              <td
+                                className={`py-1.5 text-right font-bold ${
+                                  running < 0 ? "text-danger" : "text-success"
+                                }`}
+                              >
+                                {running.toFixed(3)}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Leave Applications ────────────────────────────────────────── */}
+        <div>
+          <SectionTitle>Leave Applications</SectionTitle>
+          {leaveApps.length === 0 ? (
+            <p className="text-sm text-muted">No leave applications found.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
+                      Type
+                    </th>
+                    <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
+                      Applied
+                    </th>
+                    <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
+                      Days
+                    </th>
+                    <th className="pb-2 pr-4 font-medium text-muted text-xs uppercase">
+                      Pay
+                    </th>
+                    <th className="pb-2 font-medium text-muted text-xs uppercase">
+                      Status
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {leaveApps.map((la) => (
+                    <tr key={la.id} className="border-b border-border/50">
+                      <td className="py-2 pr-4">
+                        {la.leave_type}
+                        <span className="text-muted text-xs">
+                          {" "}
+                          ({la.leave_type_desc})
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4">{la.applied_date}</td>
+                      <td className="py-2 pr-4">{la.credits}</td>
+                      <td className="py-2 pr-4">
+                        ₱{la.pay_amount.toLocaleString()}
+                      </td>
+                      <td className="py-2">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-xs rounded-full font-medium ${
+                            la.status === "approved"
+                              ? "bg-success/10 text-success"
+                              : la.status === "denied"
+                                ? "bg-danger/10 text-danger"
+                                : la.status === "cancelled"
+                                  ? "bg-gray-500/10 text-gray-500"
+                                  : "bg-warning/10 text-warning"
+                          }`}
+                        >
+                          {la.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderPayroll = () => (
     <div>

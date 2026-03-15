@@ -76,6 +76,10 @@ export interface LeaveApplication {
   credits: number;
   remarks: string;
   status: "pending" | "approved" | "denied" | "cancelled";
+  /** CSC Form 6 type-specific details: VL = { place_visited }, SL = { hospitalized, illness } */
+  details: Record<string, unknown> | null;
+  /** Employee's leave credit balance at the time of filing (audit trail) */
+  credit_balance_before: number | null;
   created_at: string;
 }
 

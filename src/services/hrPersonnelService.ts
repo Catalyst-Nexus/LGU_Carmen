@@ -422,7 +422,8 @@ export const fetchPersonnelLeaveApplications = async (perId: string) => {
     .select(
       `
       id, applied_date, approved_date, pay_amount, credits, status, remarks,
-      leave_out_subtype:los_id ( code, description )
+      details, credit_balance_before,
+      leave_out_subtype:los_id ( code, description, lot_id )
     `,
     )
     .eq("per_id", perId)
@@ -446,10 +447,16 @@ export const fetchPersonnelLeaveApplications = async (perId: string) => {
       approved_date: (row.approved_date as string) || null,
       leave_type: subObj?.code ?? "—",
       leave_type_desc: subObj?.description ?? "—",
+      lot_id: (subObj?.lot_id ?? null) as string | null,
       credits: Number(row.credits) || 0,
       pay_amount: Number(row.pay_amount) || 0,
       status: row.status as string,
       remarks: (row.remarks as string) || "",
+      details: (row.details as Record<string, unknown>) ?? null,
+      credit_balance_before:
+        row.credit_balance_before != null
+          ? Number(row.credit_balance_before)
+          : null,
     };
   });
 };

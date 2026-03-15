@@ -10,6 +10,13 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 // Interfaces
 // =============================================================================
 
+export interface PhHoliday {
+  id: string;
+  date: string;
+  description: string;
+  type: "regular" | "special_non_working" | "special_working";
+}
+
 export interface LeaveSubtype {
   id: string;
   description: string;
@@ -42,6 +49,10 @@ export interface LeaveApplicationFormData {
   leave_dates?: string[];
   /** personnel_leave_credits.id — needed to link dates to the right credit row */
   plc_id?: string;
+  /** CSC Form 6 type-specific details: VL = { place_visited }, SL = { hospitalized, illness } */
+  details?: Record<string, unknown> | null;
+  /** Employee's leave credit balance at time of filing (audit snapshot) */
+  credit_balance_before?: number | null;
 }
 
 // =============================================================================
@@ -81,7 +92,8 @@ export const fetchLeaveApplications = async () => {
     .select(
       `
       id, per_id, los_id, applied_date, approved_date, approved_by,
-      pay_amount, credits, status, remarks, created_at,
+      pay_amount, credits, status, remarks, details, credit_balance_before,
+      created_at,
       personnel:per_id ( first_name, last_name ),
       leave_out_subtype:los_id ( code, description ),
       approver:approved_by ( first_name, last_name )
@@ -125,6 +137,11 @@ export const fetchLeaveApplications = async () => {
       credits: Number(row.credits) || 0,
       remarks: (row.remarks as string) ?? "",
       status: row.status as string,
+      details: (row.details as Record<string, unknown>) ?? null,
+      credit_balance_before:
+        row.credit_balance_before != null
+          ? Number(row.credit_balance_before)
+          : null,
       created_at: row.created_at as string,
     };
   });
@@ -234,6 +251,159 @@ export const fetchLeaveCredits = async (
 };
 
 /**
+ * Fetch Philippine public holiday dates (ISO strings) for a year range.
+ * Used by LeaveDialog to exclude holidays from working-days computation.
+ */
+export const fetchHolidays = async (
+  yearStart: number,
+  yearEnd?: number,
+): Promise<string[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const end = yearEnd ?? yearStart;
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("ph_holiday")
+    .select("date")
+    .gte("date", `${yearStart}-01-01`)
+    .lte("date", `${end}-12-31`)
+    .neq("type", "special_working");
+
+  if (error) {
+    console.error("Error fetching holidays:", error);
+    return [];
+  }
+
+  return (data || []).map((row: Record<string, unknown>) => row.date as string);
+};
+
+/**
+ * Fetch all holiday records (full objects) from hr.ph_holiday for management UI.
+ * Optionally filter by a specific year.
+ */
+export const fetchAllHolidays = async (year?: number): Promise<PhHoliday[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  let query = (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("ph_holiday")
+    .select("id, date, description, type")
+    .order("date");
+
+  if (year) {
+    query = query.gte("date", `${year}-01-01`).lte("date", `${year}-12-31`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error fetching all holidays:", error);
+    return [];
+  }
+
+  return (data || []) as PhHoliday[];
+};
+
+/**
+ * Add a single Philippine public holiday.
+ */
+export const addHoliday = async (
+  holiday: Omit<PhHoliday, "id">,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("ph_holiday")
+    .insert(holiday);
+
+  if (error) {
+    console.error("Error adding holiday:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Delete a Philippine public holiday by id.
+ */
+export const deleteHoliday = async (
+  id: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("ph_holiday")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error deleting holiday:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Batch-upsert Philippine public holidays.
+ * On date conflict: updates description and type (useful when re-importing from the API).
+ * Returns the number of rows upserted.
+ */
+export const upsertHolidays = async (
+  holidays: Omit<PhHoliday, "id">[],
+): Promise<{ success: boolean; inserted: number; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, inserted: 0, error: "Supabase is not configured" };
+  }
+
+  const { data, error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("ph_holiday")
+    .upsert(holidays, { onConflict: "date" })
+    .select("id");
+
+  if (error) {
+    console.error("Error upserting holidays:", error);
+    return { success: false, inserted: 0, error: error.message };
+  }
+
+  return { success: true, inserted: (data || []).length };
+};
+
+/**
+ * Update leave credit balances for an employee (used by HR admin to set
+ * opening balances and earned credits at the start of a period).
+ */
+export const updateLeaveCredit = async (
+  id: string,
+  data: { begin_balance: number; earned: number; current_balance: number },
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("personnel_leave_credits")
+    .update(data)
+    .eq("id", id);
+
+  if (error) {
+    console.error("Error updating leave credit:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
  * Insert specific leave dates into hr.leave_out_dates.
  * Each row triggers deduct_leave_credit automatically (DB trigger).
  */
@@ -291,6 +461,8 @@ export const createLeaveApplication = async (
         pay_amount: leaveData.pay_amount ?? 0,
         status: leaveData.status,
         remarks: leaveData.remarks,
+        details: leaveData.details ?? null,
+        credit_balance_before: leaveData.credit_balance_before ?? null,
       },
     ])
     .select("id")
@@ -359,6 +531,32 @@ export const updateLeaveApplication = async (
 
   if (error) {
     console.error("Error updating leave application:", error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
+};
+
+/**
+ * Delete all leave_out_dates rows for a given leave application.
+ * Each deleted row fires trg_restore_leave_credit, restoring the credit balance.
+ * Call this when changing leave status to 'denied' or 'cancelled'.
+ */
+export const clearLeaveOutDates = async (
+  leaveOutId: string,
+): Promise<{ success: boolean; error?: string }> => {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { error } = await (supabase as NonNullable<typeof supabase>)
+    .schema("hr")
+    .from("leave_out_dates")
+    .delete()
+    .eq("plaid", leaveOutId);
+
+  if (error) {
+    console.error("Error clearing leave out dates:", error);
     return { success: false, error: error.message };
   }
 
