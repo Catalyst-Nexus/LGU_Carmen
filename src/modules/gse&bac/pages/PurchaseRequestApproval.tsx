@@ -27,6 +27,12 @@ import {
   fetchResponsibilityCenters,
   fetchSections,
 } from "@/services/gseService";
+import {
+  drawPRDocumentHeader,
+  drawPRDocumentFooter,
+  DEFAULT_PR_HEADER,
+  DEFAULT_PR_FOOTER_SIGNATORIES,
+} from "../components/PRDocumentComponents";
 
 type ViewMode = "list" | "detail";
 
@@ -98,7 +104,9 @@ const generatePRPDF = (
   const marginLeft = 15;
   const marginRight = 15;
   const contentWidth = pageWidth - marginLeft - marginRight;
-  let y = 15;
+
+  // Draw document header (Province, Entity, Address)
+  let y = drawPRDocumentHeader(doc, DEFAULT_PR_HEADER);
 
   const headerBg: [number, number, number] = [240, 240, 240];
   const borderColor: [number, number, number] = [0, 0, 0];
@@ -142,9 +150,6 @@ const generatePRPDF = (
   doc.setFont("helvetica", "bold");
   doc.text("PURCHASE REQUEST", pageWidth / 2, y, { align: "center" });
   y += 8;
-  doc.setLineWidth(0.5);
-  doc.line(marginLeft, y, pageWidth - marginRight, y);
-  y += 6;
 
   // Header Information Grid
   const colWidth1 = 90;
@@ -352,27 +357,8 @@ const generatePRPDF = (
   doc.text(purposeLines.slice(0, 2), marginLeft + 2, y + 9);
   y += 15;
 
-  // Signatories
-  if (y > pageHeight - 50) {
-    doc.addPage();
-    y = 20;
-  } else {
-    y = Math.max(y + 10, pageHeight - 55);
-  }
-
-  const sigWidth = contentWidth / 2 - 10;
-
-  text("Requested by:", marginLeft, y, { size: 8 });
-  text("Approved by:", marginLeft + contentWidth / 2 + 10, y, { size: 8 });
-  y += 15;
-
-  doc.setLineWidth(0.3);
-  doc.line(marginLeft, y, marginLeft + sigWidth, y);
-  doc.line(marginLeft + contentWidth / 2 + 10, y, marginLeft + contentWidth / 2 + 10 + sigWidth, y);
-  y += 4;
-
-  text(pr.requested_by || "", marginLeft + sigWidth / 2, y, { align: "center", bold: true, size: 9 });
-  text(pr.approved_by || "", marginLeft + contentWidth / 2 + 10 + sigWidth / 2, y, { align: "center", bold: true, size: 9 });
+  // Draw document footer with dynamic signatories
+  drawPRDocumentFooter(doc, DEFAULT_PR_FOOTER_SIGNATORIES, y + 10);
 
   doc.save(`PR_${pr.pr_no || pr.pr_id}.pdf`);
 };
@@ -594,7 +580,17 @@ const PurchaseRequestApproval = () => {
 
         {/* ── Paper document ─────────────────────────────── */}
         <div className="bg-white border-2 border-gray-800 max-w-7xl mx-auto shadow-lg text-gray-900">
-          {/* Header */}
+          {/* Document Header - Province Info */}
+          <div className="text-center py-4 px-6 border-b border-gray-300">
+            <p className="text-sm">{DEFAULT_PR_HEADER.provinceName}</p>
+            <p className="text-base font-bold">{DEFAULT_PR_HEADER.entityName}</p>
+            {DEFAULT_PR_HEADER.subEntityName && (
+              <p className="text-sm">{DEFAULT_PR_HEADER.subEntityName}</p>
+            )}
+            <p className="text-xs italic text-gray-600">{DEFAULT_PR_HEADER.address}</p>
+          </div>
+
+          {/* Title */}
           <div className="text-center border-b-2 border-gray-800 py-4 px-6">
             <h1 className="font-bold text-lg tracking-widest">
               PURCHASE REQUEST
@@ -780,13 +776,23 @@ const PurchaseRequestApproval = () => {
             </div>
           </div>
 
-          {/* ── Requested by ─────────────────────────────── */}
-          <div className="border-t border-gray-800 px-3 py-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold text-gray-500 uppercase shrink-0">
-                Requested by :
-              </span>
-              <span className="text-xs">{selectedPR.requested_by || "-"}</span>
+          {/* ── Signatories Footer ─────────────────────────────── */}
+          <div className="border-t-2 border-gray-800 px-6 py-6">
+            <div className="grid grid-cols-3 gap-4">
+              {DEFAULT_PR_FOOTER_SIGNATORIES.map((signatory, index) => (
+                <div key={index} className="text-center">
+                  <p className="text-[10px] text-gray-500 uppercase mb-8">
+                    {signatory.title}
+                  </p>
+                  <div className="border-b border-gray-800 mx-4 mb-1" />
+                  <p className="text-xs font-bold uppercase">
+                    {signatory.name}
+                  </p>
+                  <p className="text-[10px] text-gray-600">
+                    {signatory.position}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
 
