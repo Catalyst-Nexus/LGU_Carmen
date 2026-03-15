@@ -25,9 +25,9 @@ export default function OfficialReceiptList({
     const searchLower = searchTerm.toLowerCase();
     return (
       receipt.or_number.toLowerCase().includes(searchLower) ||
-      receipt.payor.toLowerCase().includes(searchLower) ||
+      receipt.payor_name.toLowerCase().includes(searchLower) ||
       receipt.particulars.toLowerCase().includes(searchLower) ||
-      receipt.account_code_details?.description.toLowerCase().includes(searchLower)
+      receipt.collection_type?.description.toLowerCase().includes(searchLower)
     );
   });
 
@@ -144,13 +144,13 @@ export default function OfficialReceiptList({
                     <div>
                       <p className="text-xs text-muted">Payor</p>
                       <p className="text-sm font-medium text-foreground truncate">
-                        {receipt.payor}
+                        {receipt.payor_name}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-muted">Collection Type</p>
                       <p className="text-sm font-medium text-foreground truncate">
-                        {receipt.account_code_details?.description}
+                        {receipt.collection_type?.description}
                       </p>
                     </div>
                     <div>
