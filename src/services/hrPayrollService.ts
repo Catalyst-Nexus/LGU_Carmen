@@ -316,6 +316,392 @@ export const fetchEmployeePaySummaries = async (
 };
 
 // =============================================================================
+// Generate Payroll
+// =============================================================================
+
+/** Per-employee data returned by generatePayroll — feeds both payroll register & payslip PDFs. */
+export interface GeneratedSlipInfo {
+  paySlipId: string;
+  perId: string;
+  employeeName: string;
+  employeeNo: string;
+  positionTitle: string;
+  officeName: string;
+  rate: number;
+  daysWorked: number;
+  basicPay: number;
+  overtimeHours: number;
+  overtimePay: number;
+  grossAmount: number;
+  deductions: { code: string; label: string; amount: number }[];
+  totalDeductions: number;
+  netPay: number;
+}
+
+export interface GeneratedPayrollResult {
+  payrollId: string;
+  employees: GeneratedSlipInfo[];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyJoin = any;
+
+/** Unwrap a Supabase join that may be object or single-element array. */
+const unwrap = <T>(v: T | T[] | null): T | null =>
+  Array.isArray(v) ? v[0] ?? null : v;
+
+/**
+ * Generate a full payroll for the given period:
+ * 1. Upsert pay_slip rows from time records
+ * 2. Upsert mandatory deductions on each slip
+ * 3. Create / update the hr.payroll batch record
+ * 4. Link pay slips → payroll via hr.payroll_pay_slips
+ *
+ * Returns the payroll ID + per-employee data for PDF generation.
+ */
+export const generatePayroll = async (
+  periodStart: string,
+  periodEnd: string,
+  periodType: "first_half" | "second_half" | "monthly" | "special" = "first_half",
+): Promise<GeneratedPayrollResult> => {
+  if (!isSupabaseConfigured() || !supabase) throw new Error("Supabase not configured");
+  const sb = supabase as NonNullable<typeof supabase>;
+
+  // 1. Fetch complete time records for the period
+  const { data: timeRecords, error: trErr } = await sb
+    .schema("hr")
+    .from("time_record")
+    .select("id, per_id, date, pay_amount, out")
+    .gte("date", periodStart)
+    .lte("date", periodEnd)
+    .not("out", "is", null);
+
+  if (trErr) throw new Error(`Failed to fetch time records: ${trErr.message}`);
+  if (!timeRecords || timeRecords.length === 0)
+    throw new Error("No complete time records found for this period.");
+
+  // 2. Group time records by employee
+  const byEmployee = new Map<string, { ids: string[]; gross: number; dates: Set<string> }>();
+  for (const tr of timeRecords) {
+    const perId = tr.per_id as string;
+    if (!byEmployee.has(perId)) byEmployee.set(perId, { ids: [], gross: 0, dates: new Set() });
+    const entry = byEmployee.get(perId)!;
+    entry.ids.push(tr.id as string);
+    entry.gross += Number(tr.pay_amount) || 0;
+    entry.dates.add(tr.date as string);
+  }
+
+  // 3. Fetch personnel details
+  const perIds = Array.from(byEmployee.keys());
+  const { data: personnelRows } = await sb
+    .schema("hr")
+    .from("personnel")
+    .select(
+      `id, first_name, last_name, employee_no,
+       position:pos_id ( description, salary_rate:sr_id ( rate:rate_id ( amount ) ) ),
+       office:o_id ( description )`,
+    )
+    .in("id", perIds);
+
+  const personnelMap = new Map<string, AnyJoin>();
+  for (const p of personnelRows ?? []) personnelMap.set(p.id as string, p);
+
+  // 4. Fetch active mandatory deduction types
+  const { data: dedTypes, error: dtErr } = await sb
+    .schema("hr")
+    .from("deduction_type")
+    .select("id, code, description, computation_type, default_rate, is_mandatory")
+    .eq("is_active", true)
+    .eq("is_mandatory", true);
+  if (dtErr) throw new Error(`Failed to fetch deduction types: ${dtErr.message}`);
+
+  // 5. Fetch approved leave_outs in the period
+  const { data: leaveOuts } = await sb
+    .schema("hr")
+    .from("personnel_leave_out")
+    .select("id, per_id")
+    .eq("status", "approved")
+    .gte("applied_date", periodStart)
+    .lte("applied_date", periodEnd);
+
+  const leavesByEmployee = new Map<string, string[]>();
+  for (const lo of leaveOuts || []) {
+    const perId = lo.per_id as string;
+    if (!leavesByEmployee.has(perId)) leavesByEmployee.set(perId, []);
+    leavesByEmployee.get(perId)!.push(lo.id as string);
+  }
+
+  // 6. Process each employee
+  const results: GeneratedSlipInfo[] = [];
+  const slipIds: string[] = [];
+
+  for (const [perId, { ids: trIds, gross, dates }] of byEmployee) {
+    const person = personnelMap.get(perId);
+    const pos = unwrap(person?.position);
+    const ofc = unwrap(person?.office);
+
+    let dailyRate = 0;
+    if (pos?.salary_rate) {
+      const sr = unwrap(pos.salary_rate);
+      const r = unwrap(sr?.rate);
+      dailyRate = Number(r?.amount) || 0;
+    }
+
+    const daysWorked = dates.size;
+
+    // Compute mandatory deductions
+    const deductions: { deduction_type_id: string; code: string; label: string; amount: number }[] = [];
+    let totalDeductions = 0;
+    for (const dt of dedTypes || []) {
+      let amount = 0;
+      if (dt.computation_type === "percentage") {
+        amount = Math.round(gross * Number(dt.default_rate) * 100) / 100;
+      } else if (dt.computation_type === "fixed") {
+        amount = Number(dt.default_rate);
+      }
+      if (amount > 0) {
+        deductions.push({
+          deduction_type_id: dt.id as string,
+          code: dt.code as string,
+          label: dt.description as string,
+          amount,
+        });
+        totalDeductions += amount;
+      }
+    }
+    totalDeductions = Math.round(totalDeductions * 100) / 100;
+
+    // Upsert pay_slip
+    const { data: slip, error: slipErr } = await sb
+      .schema("hr")
+      .from("pay_slip")
+      .upsert(
+        {
+          per_id: perId,
+          period_start: periodStart,
+          period_end: periodEnd,
+          period_type: periodType,
+          gross_amount: Math.round(gross * 100) / 100,
+          total_deductions: totalDeductions,
+          status: "computed",
+        },
+        { onConflict: "per_id,period_start,period_end" },
+      )
+      .select("id")
+      .single();
+
+    if (slipErr || !slip) {
+      console.error(`Failed to upsert pay_slip for ${perId}:`, slipErr);
+      continue;
+    }
+    const slipId = slip.id as string;
+    slipIds.push(slipId);
+
+    // Link time records
+    await sb.schema("hr").from("pay_slip_time_records").delete().eq("pay_slip_id", slipId);
+    await sb
+      .schema("hr")
+      .from("pay_slip_time_records")
+      .insert(trIds.map((time_record_id) => ({ pay_slip_id: slipId, time_record_id })));
+
+    // Upsert deductions
+    if (deductions.length > 0) {
+      await sb
+        .schema("hr")
+        .from("pay_slip_deductions")
+        .upsert(
+          deductions.map((d) => ({
+            pay_slip_id: slipId,
+            deduction_type_id: d.deduction_type_id,
+            amount: d.amount,
+          })),
+          { onConflict: "pay_slip_id,deduction_type_id" },
+        );
+    }
+
+    // Link leave outs
+    const empLeaves = leavesByEmployee.get(perId);
+    if (empLeaves && empLeaves.length > 0) {
+      await sb.schema("hr").from("pay_slip_leave_outs").delete().eq("pay_slip_id", slipId);
+      await sb
+        .schema("hr")
+        .from("pay_slip_leave_outs")
+        .insert(empLeaves.map((leave_out_id) => ({ pay_slip_id: slipId, leave_out_id })));
+    }
+
+    results.push({
+      paySlipId: slipId,
+      perId,
+      employeeName: person
+        ? `${person.first_name} ${person.last_name}`.toUpperCase()
+        : "—",
+      employeeNo: person?.employee_no ?? "—",
+      positionTitle: pos?.description ?? "—",
+      officeName: ofc?.description ?? "—",
+      rate: dailyRate,
+      daysWorked,
+      basicPay: Math.round(gross * 100) / 100,
+      overtimeHours: 0,
+      overtimePay: 0,
+      grossAmount: Math.round(gross * 100) / 100,
+      deductions: deductions.map((d) => ({ code: d.code, label: d.label, amount: d.amount })),
+      totalDeductions,
+      netPay: Math.round((gross - totalDeductions) * 100) / 100,
+    });
+  }
+
+  // 7. Create / update payroll batch record
+  const totalGross = results.reduce((s, e) => s + e.grossAmount, 0);
+  const fmtD = (iso: string) => {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  };
+  const year = new Date(periodStart + "T00:00:00").getFullYear();
+  const periodName = `${fmtD(periodStart)} - ${fmtD(periodEnd)}, ${year}`;
+
+  // Check if payroll already exists for this period
+  const { data: existing } = await sb
+    .schema("hr")
+    .from("payroll")
+    .select("id")
+    .eq("date_from", periodStart)
+    .eq("date_to", periodEnd)
+    .eq("fund_type", "GF")
+    .maybeSingle();
+
+  let payrollId: string;
+
+  if (existing) {
+    await sb
+      .schema("hr")
+      .from("payroll")
+      .update({ total_amount: Math.round(totalGross * 100) / 100, status: "computed" })
+      .eq("id", existing.id);
+    payrollId = existing.id as string;
+  } else {
+    const { data: payroll, error: payrollErr } = await sb
+      .schema("hr")
+      .from("payroll")
+      .insert({
+        period_name: periodName,
+        date_from: periodStart,
+        date_to: periodEnd,
+        fiscal_year: year,
+        fund_type: "GF",
+        total_amount: Math.round(totalGross * 100) / 100,
+        status: "computed",
+      })
+      .select("id")
+      .single();
+    if (payrollErr || !payroll) throw new Error(`Failed to create payroll: ${payrollErr?.message}`);
+    payrollId = payroll.id as string;
+  }
+
+  // 8. Link pay slips to payroll
+  await sb.schema("hr").from("payroll_pay_slips").delete().eq("payroll_id", payrollId);
+  if (slipIds.length > 0) {
+    await sb
+      .schema("hr")
+      .from("payroll_pay_slips")
+      .insert(slipIds.map((pay_slip_id) => ({ payroll_id: payrollId, pay_slip_id })));
+  }
+
+  return { payrollId, employees: results };
+};
+
+// =============================================================================
+// Fetch single pay slip detail for individual payslip PDF
+// =============================================================================
+
+export interface PaySlipDetail {
+  paySlipId: string;
+  employeeName: string;
+  employeeNo: string;
+  positionTitle: string;
+  officeName: string;
+  periodStart: string;
+  periodEnd: string;
+  rate: number;
+  daysWorked: number;
+  basicPay: number;
+  grossAmount: number;
+  deductions: { code: string; label: string; amount: number }[];
+  totalDeductions: number;
+  netPay: number;
+}
+
+export const fetchPaySlipDetailForPDF = async (
+  paySlipId: string,
+): Promise<PaySlipDetail | null> => {
+  if (!isSupabaseConfigured() || !supabase) return null;
+  const sb = supabase as NonNullable<typeof supabase>;
+
+  const { data, error } = await sb
+    .schema("hr")
+    .from("pay_slip")
+    .select(
+      `id, per_id, period_start, period_end,
+       gross_amount, total_deductions, net_amount,
+       personnel:per_id (
+         first_name, last_name, employee_no,
+         position:pos_id ( description, salary_rate:sr_id ( rate:rate_id ( amount ) ) ),
+         office:o_id ( description )
+       ),
+       pay_slip_deductions (
+         amount,
+         deduction_type:deduction_type_id ( code, description )
+       ),
+       pay_slip_time_records ( time_record_id )`,
+    )
+    .eq("id", paySlipId)
+    .single();
+
+  if (error || !data) return null;
+
+  const person = unwrap((data as AnyJoin).personnel);
+  const pos = unwrap(person?.position);
+  const ofc = unwrap(person?.office);
+
+  let rate = 0;
+  if (pos?.salary_rate) {
+    const sr = unwrap(pos.salary_rate);
+    const r = unwrap(sr?.rate);
+    rate = Number(r?.amount) || 0;
+  }
+
+  const rawDeds = ((data as AnyJoin).pay_slip_deductions ?? []) as AnyJoin[];
+  const deductions = rawDeds.map((d: AnyJoin) => {
+    const dt = unwrap(d.deduction_type);
+    return {
+      code: (dt?.code as string) ?? "",
+      label: (dt?.description as string) ?? "",
+      amount: Number(d.amount) || 0,
+    };
+  });
+
+  const trCount = ((data as AnyJoin).pay_slip_time_records ?? []).length;
+
+  return {
+    paySlipId: data.id as string,
+    employeeName: person
+      ? `${person.first_name} ${person.last_name}`.toUpperCase()
+      : "—",
+    employeeNo: person?.employee_no ?? "—",
+    positionTitle: pos?.description ?? "—",
+    officeName: ofc?.description ?? "—",
+    periodStart: data.period_start as string,
+    periodEnd: data.period_end as string,
+    rate,
+    daysWorked: trCount,
+    basicPay: Number(data.gross_amount) || 0,
+    grossAmount: Number(data.gross_amount) || 0,
+    deductions,
+    totalDeductions: Number(data.total_deductions) || 0,
+    netPay: Number(data.net_amount) || 0,
+  };
+};
+
+// =============================================================================
 // Remittance
 // =============================================================================
 

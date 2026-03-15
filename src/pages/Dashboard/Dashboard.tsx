@@ -80,7 +80,6 @@ import {
   Briefcase,
   CalendarOff,
   Calculator,
-  FileSpreadsheet,
 } from "lucide-react";
 
 const colorClasses = {
@@ -195,13 +194,6 @@ const DashboardHome = () => {
       text: "Payroll Computation",
       description: "Compute payroll & deductions",
       color: "pink" as const,
-    },
-    {
-      to: "/dashboard/hr-payroll/register",
-      icon: FileSpreadsheet,
-      text: "Payroll Register",
-      description: "Payroll summary & history",
-      color: "blue" as const,
     },
     {
       to: "/dashboard/hr-payroll/remittance",
