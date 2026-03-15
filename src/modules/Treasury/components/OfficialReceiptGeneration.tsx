@@ -15,6 +15,36 @@ interface OfficialReceiptGenerationProps {
   onReceiptDeleted: (id: string) => void;
 }
 
+/** Extract trailing number from an OR number string, e.g. "OR-2026-00005" → { prefix: "OR-2026-", num: 5, pad: 5 } */
+function parseOrNumber(orNum: string): { prefix: string; num: number; pad: number } | null {
+  const match = orNum.match(/^(.*?)(\d+)$/);
+  if (!match) return null;
+  return { prefix: match[1], num: parseInt(match[2], 10), pad: match[2].length };
+}
+
+/** Given all existing OR numbers, compute the next sequential one. */
+function computeNextOrNumber(existingReceipts: TreasuryOfficialReceipt[]): string {
+  const year = new Date().getFullYear();
+  const fallback = `OR-${year}-00001`;
+
+  if (existingReceipts.length === 0) return fallback;
+
+  let maxNum = 0;
+  let bestPrefix = `OR-${year}-`;
+  let bestPad = 5;
+
+  for (const r of existingReceipts) {
+    const parsed = parseOrNumber(r.or_number);
+    if (parsed && parsed.num > maxNum) {
+      maxNum = parsed.num;
+      bestPrefix = parsed.prefix;
+      bestPad = parsed.pad;
+    }
+  }
+
+  return `${bestPrefix}${String(maxNum + 1).padStart(bestPad, '0')}`;
+}
+
 export default function OfficialReceiptGeneration({
   accountCodes,
   receipts,
@@ -26,6 +56,7 @@ export default function OfficialReceiptGeneration({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TreasuryOfficialReceipt | null>(null);
   const [orNumber, setOrNumber] = useState('');
+  const [orNumberError, setOrNumberError] = useState('');
   const [payor, setPayor] = useState('');
   const [receiptType, setReceiptType] = useState('');
   const [accountCodeId, setAccountCodeId] = useState('');
@@ -62,9 +93,31 @@ export default function OfficialReceiptGeneration({
     );
   }, [receipts, search]);
 
+  const checkOrNumberDuplicate = (value: string, currentEditingId?: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setOrNumberError('');
+      return;
+    }
+    const duplicate = receipts.find(
+      (r) => r.or_number.toLowerCase() === trimmed.toLowerCase() && r.id !== currentEditingId
+    );
+    if (duplicate) {
+      setOrNumberError(`OR Number "${trimmed}" has already been used.`);
+    } else {
+      setOrNumberError('');
+    }
+  };
+
+  const handleOrNumberChange = (value: string) => {
+    setOrNumber(value);
+    checkOrNumberDuplicate(value, editing?.id);
+  };
+
   const resetForm = () => {
     setEditing(null);
     setOrNumber('');
+    setOrNumberError('');
     setPayor('');
     setReceiptType('');
     setAccountCodeId('');
@@ -74,12 +127,15 @@ export default function OfficialReceiptGeneration({
 
   const openAdd = () => {
     resetForm();
+    const next = computeNextOrNumber(receipts);
+    setOrNumber(next);
     setDialogOpen(true);
   };
 
   const openEdit = (item: TreasuryOfficialReceipt) => {
     setEditing(item);
     setOrNumber(item.or_number);
+    setOrNumberError('');
     setPayor(item.payor);
     setReceiptType(item.type);
     setAccountCodeId(item.account_code_id);
@@ -90,6 +146,7 @@ export default function OfficialReceiptGeneration({
 
   const validate = () => {
     if (!orNumber.trim()) return 'OR Number is required.';
+    if (orNumberError) return orNumberError;
     if (!payor.trim()) return 'Payor is required.';
     if (!receiptType.trim()) return 'Type is required.';
     if (!accountCodeId) return 'Please select an Account Title from the list.';
@@ -345,6 +402,7 @@ export default function OfficialReceiptGeneration({
         title={editing ? 'Edit Official Receipt' : 'Generate Official Receipt'}
         submitLabel={isSaving ? 'Saving...' : editing ? 'Save Changes' : 'Save OR'}
         isLoading={isSaving}
+        submitDisabled={!!orNumberError}
       >
         <div className="space-y-4">
           {formError && (
@@ -353,14 +411,26 @@ export default function OfficialReceiptGeneration({
             </div>
           )}
 
-          <FormInput
-            id="or-number"
-            label="OR Number"
-            value={orNumber}
-            onChange={setOrNumber}
-            placeholder="e.g., OR-2026-00001"
-            required
-          />
+          <div className="space-y-1.5">
+            <label htmlFor="or-number" className="block text-sm font-medium text-foreground">
+              OR Number <span className="text-error ml-1">*</span>
+            </label>
+            <input
+              id="or-number"
+              type="text"
+              className={`w-full px-3 py-2.5 border rounded-lg text-sm bg-background text-foreground focus:outline-none transition-colors ${
+                orNumberError
+                  ? 'border-danger focus:border-danger'
+                  : 'border-border focus:border-success'
+              }`}
+              value={orNumber}
+              onChange={(e) => handleOrNumberChange(e.target.value)}
+              placeholder="e.g., OR-2026-00001"
+            />
+            {orNumberError && (
+              <p className="text-xs text-danger mt-1">{orNumberError}</p>
+            )}
+          </div>
 
           <FormInput
             id="payor"

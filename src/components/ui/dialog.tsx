@@ -11,6 +11,7 @@ interface BaseDialogProps {
   submitLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
+  submitDisabled?: boolean;
   size?: "sm" | "md" | "lg" | "xl";
   bodyClassName?: string;
 }
@@ -31,6 +32,7 @@ export const BaseDialog = ({
   submitLabel = "Create",
   cancelLabel = "Cancel",
   isLoading = false,
+  submitDisabled = false,
   size = "md",
   bodyClassName,
 }: BaseDialogProps) => {
@@ -78,7 +80,7 @@ export const BaseDialog = ({
             <button
               className="px-4 py-2.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onSubmit}
-              disabled={isLoading}
+              disabled={isLoading || submitDisabled}
             >
               {isLoading ? "Saving..." : submitLabel}
             </button>
