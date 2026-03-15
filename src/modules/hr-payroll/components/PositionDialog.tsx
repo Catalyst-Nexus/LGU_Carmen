@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { BaseDialog, FormInput } from "@/components/ui/dialog";
 import type { PlantillaPosition } from "@/types/hr.types";
-import type { Office, SalaryRate, PositionType } from "@/services/hrService";
+import type { Office, SalaryRate, PositionType } from "../services/hrService";
 import {
   fetchOffices,
   fetchSalaryRates,
   fetchPositionTypes,
-} from "@/services/hrService";
+} from "../services/hrService";
 
 interface PositionDialogProps {
   open: boolean;
@@ -231,7 +231,7 @@ const PositionDialog = ({
               type="number"
               min={1}
               max={50}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={slots}
               onChange={(e) =>
                 setSlots(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
@@ -264,7 +264,7 @@ const PositionDialog = ({
           <div className="grid grid-cols-2 gap-3">
             <select
               id="salary-grade"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={selectedSG}
               onChange={(e) => setSelectedSG(e.target.value)}
               required
@@ -279,7 +279,7 @@ const PositionDialog = ({
             </select>
             <select
               id="salary-step"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={selectedStep}
               onChange={(e) => setSelectedStep(e.target.value)}
               required
@@ -294,7 +294,7 @@ const PositionDialog = ({
             </select>
           </div>
           {resolvedRate && (
-            <p className="text-xs text-success font-medium">
+            <p className="text-xs text-accent font-medium">
               Monthly: {formatPeso(resolvedRate.amount)}
             </p>
           )}
@@ -314,7 +314,7 @@ const PositionDialog = ({
           </label>
           <select
             id="position-type"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={positionTypeId}
             onChange={(e) => setPositionTypeId(e.target.value)}
             required
@@ -340,7 +340,7 @@ const PositionDialog = ({
           </label>
           <select
             id="office"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={officeId}
             onChange={(e) => setOfficeId(e.target.value)}
             required
@@ -374,7 +374,7 @@ const PositionDialog = ({
           </label>
           <select
             id="funding-source"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={fundingSource}
             onChange={(e) => setFundingSource(e.target.value)}
           >

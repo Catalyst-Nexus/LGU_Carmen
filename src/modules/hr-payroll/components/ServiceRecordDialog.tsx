@@ -8,7 +8,7 @@ import {
   type ServiceRecordFormData,
   type PositionForDialog,
   type Office,
-} from "@/services/hrService";
+} from "../services/hrService";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -222,7 +222,7 @@ const ServiceRecordDialog = ({
           </label>
           <select
             id="record-type"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={recordType}
             onChange={(e) =>
               setRecordType(e.target.value as ServiceRecord["record_type"])
@@ -249,7 +249,7 @@ const ServiceRecordDialog = ({
             <input
               id="effective-date"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={effectiveDate}
               onChange={(e) => setEffectiveDate(e.target.value)}
               required
@@ -266,7 +266,7 @@ const ServiceRecordDialog = ({
             <input
               id="end-date"
               type="date"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               min={effectiveDate}
@@ -285,7 +285,7 @@ const ServiceRecordDialog = ({
           </label>
           <select
             id="pos-select"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={positionId}
             onChange={(e) => setPositionId(e.target.value)}
             disabled={loadingData}
@@ -298,7 +298,7 @@ const ServiceRecordDialog = ({
             ))}
           </select>
           {selectedPosition && selectedPosition.monthly_salary > 0 && (
-            <p className="text-xs text-success">
+            <p className="text-xs text-accent">
               Monthly: {formatPeso(selectedPosition.monthly_salary)}
             </p>
           )}
@@ -315,7 +315,7 @@ const ServiceRecordDialog = ({
           </label>
           <select
             id="office-select"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={officeId}
             onChange={(e) => setOfficeId(e.target.value)}
             disabled={loadingData}
@@ -342,7 +342,7 @@ const ServiceRecordDialog = ({
             type="number"
             min={0}
             step={0.01}
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             placeholder="e.g., 25573.00"
             value={monthlySalary}
             onChange={(e) => setMonthlySalary(e.target.value)}
@@ -360,7 +360,7 @@ const ServiceRecordDialog = ({
             </label>
             <select
               id="appt-status"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={appointmentStatus}
               onChange={(e) => setAppointmentStatus(e.target.value)}
             >
@@ -386,7 +386,7 @@ const ServiceRecordDialog = ({
             </label>
             <select
               id="sep-type"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={separationType}
               onChange={(e) => setSeparationType(e.target.value)}
               required

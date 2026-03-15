@@ -3,7 +3,7 @@
  * Time slot schedules and time record (DTR) management.
  * Covers: hr.time_slot_schedule, hr.time_record
  */
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 import type { TimeSlotSchedule } from "@/types/hr.types";
 
 // Re-export so consumers can import TimeSlotSchedule from here if needed

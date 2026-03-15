@@ -128,7 +128,7 @@ const DeactivateEmployeeDialog = ({
           </label>
           <select
             id="sep-type"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={separationType}
             onChange={(e) => setSeparationType(e.target.value)}
           >
@@ -154,7 +154,7 @@ const DeactivateEmployeeDialog = ({
             id="sep-date"
             type="date"
             required
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={separationDate}
             onChange={(e) => setSeparationDate(e.target.value)}
           />
@@ -172,7 +172,7 @@ const DeactivateEmployeeDialog = ({
           <textarea
             id="sep-remarks"
             rows={2}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success resize-none"
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent resize-none"
             value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
             placeholder="e.g. Per SB Resolution 2026-035"

@@ -1,7 +1,28 @@
-import { useState, useEffect, useCallback } from 'react'
-import { PageHeader, StatsRow, StatCard, ActionsBar, PrimaryButton, DataTable, Tabs } from '@/components/ui'
-import { Calculator, RefreshCw, FileText, Download } from 'lucide-react'
-import type { PayrollPeriod } from '@/types/hr.types'
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  PageShell,
+  Section,
+  StatCard,
+  AccentButton,
+  TabBar,
+  PayrollBadge,
+  Card,
+  fmtPeso,
+  EmptyState,
+  usePagination,
+  Pagination,
+  EmptyRows,
+} from "../components/ui";
+import {
+  FileText,
+  Download,
+  Search,
+  DollarSign,
+  ReceiptText,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import type { PayrollPeriod } from "@/types/hr.types";
 import {
   fetchPayrollPeriods,
   fetchEmployeePaySummaries,
@@ -9,92 +30,82 @@ import {
   fetchPayrollPaySlips,
   fetchPaySlipDetailForPDF,
   type PayrollPaySlipRow,
-} from '@/services/hrService'
+} from "../services/hrService";
 import {
   downloadPayrollRegisterPDF,
   downloadPaySlipPDF,
   type PaySlipPDFData,
-} from '@/lib/generatePaySlipPDF'
+} from "@/lib/generatePaySlipPDF";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const LGU_NAME = 'Municipality of Carmen'
-const LGU_ADDRESS = 'Carmen, Agusan del Norte'
+const LGU_NAME = "Municipality of Carmen";
+const LGU_ADDRESS = "Carmen, Agusan del Norte";
 
 // ── Period helpers ────────────────────────────────────────────────────────────
 
-const isoDate = (d: Date) => d.toISOString().split('T')[0]
+const isoDate = (d: Date) => d.toISOString().split("T")[0];
 
-const today = new Date()
-const DEFAULT_START = isoDate(new Date(today.getFullYear(), today.getMonth(), 1))
-const DEFAULT_END   = isoDate(today)
-
-// ── Formatters ────────────────────────────────────────────────────────────────
-
-const fmtPeso = (n: number) =>
-  `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const today = new Date();
+const DEFAULT_START = isoDate(
+  new Date(today.getFullYear(), today.getMonth(), 1),
+);
+const DEFAULT_END = isoDate(today);
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const PayrollComputation = () => {
-  const [activeTab, setActiveTab]               = useState('all')
-  const [isLoading, setIsLoading]               = useState(false)
-  const [periodStart, setPeriodStart]           = useState(DEFAULT_START)
-  const [periodEnd, setPeriodEnd]               = useState(DEFAULT_END)
-  const [search, setSearch]                     = useState('')
-  const [isGenerating, setIsGenerating]         = useState(false)
-  const [employeeCount, setEmployeeCount]       = useState(0)
+  // ── Primary data ──
+  const [payrolls, setPayrolls] = useState<PayrollPeriod[]>([]);
+  const [employeeCount, setEmployeeCount] = useState(0);
 
-  // Payroll list
-  const [payrolls, setPayrolls]                 = useState<PayrollPeriod[]>([])
+  // ── Filters ──
+  const [activeTab, setActiveTab] = useState("all");
+  const [search, setSearch] = useState("");
 
-  // Selected payroll → employees
-  const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(null)
-  const [payrollSlips, setPayrollSlips]           = useState<PayrollPaySlipRow[]>([])
-  const [slipsLoading, setSlipsLoading]           = useState(false)
-  const [empSearch, setEmpSearch]                 = useState('')
+  // ── Loading flags ──
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  // ── Load payrolls ───────────────────────────────────────────────────────
+  // ── Period selector (for generating new payrolls) ──
+  const [periodStart, setPeriodStart] = useState(DEFAULT_START);
+  const [periodEnd, setPeriodEnd] = useState(DEFAULT_END);
+
+  // ── Expand/collapse: selected payroll's employees ──
+  const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(
+    null,
+  );
+  const [payrollSlips, setPayrollSlips] = useState<PayrollPaySlipRow[]>([]);
+  const [slipsLoading, setSlipsLoading] = useState(false);
+  const [empSearch, setEmpSearch] = useState("");
+
+  // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
       const [periods, summaries] = await Promise.all([
         fetchPayrollPeriods(),
         fetchEmployeePaySummaries(periodStart, periodEnd),
-      ])
-      setPayrolls(periods)
-      setEmployeeCount(summaries.length)
+      ]);
+      setPayrolls(periods);
+      setEmployeeCount(summaries.length);
+      setSelectedPayrollId(null);
+      setPayrollSlips([]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [periodStart, periodEnd])
+  }, [periodStart, periodEnd]);
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // ── Load employees for selected payroll ─────────────────────────────────
-  const handleSelectPayroll = async (payrollId: string) => {
-    if (selectedPayrollId === payrollId) {
-      setSelectedPayrollId(null)
-      setPayrollSlips([])
-      return
-    }
-    setSelectedPayrollId(payrollId)
-    setSlipsLoading(true)
-    setEmpSearch('')
-    try {
-      const slips = await fetchPayrollPaySlips(payrollId)
-      setPayrollSlips(slips)
-    } finally {
-      setSlipsLoading(false)
-    }
-  }
-
-  // ── Generate Payroll handler ────────────────────────────────────────────
+  // ── Generate Payroll handler ──────────────────────────────────────────────
   const handleGeneratePayroll = async () => {
-    if (isGenerating) return
-    setIsGenerating(true)
+    if (isGenerating) return;
+    setIsGenerating(true);
     try {
-      const result = await generatePayroll(periodStart, periodEnd)
+      const result = await generatePayroll(periodStart, periodEnd);
 
       downloadPayrollRegisterPDF({
         companyName: LGU_NAME,
@@ -102,34 +113,58 @@ const PayrollComputation = () => {
         periodStart,
         periodEnd,
         employees: result.employees,
-        preparedBy: 'System Administrator',
-      })
+        preparedBy: "System Administrator",
+      });
 
-      alert(`Payroll generated: ${result.employees.length} employee(s). PDF downloaded.`)
-      setSelectedPayrollId(null)
-      setPayrollSlips([])
-      await loadData()
+      alert(
+        `Payroll generated: ${result.employees.length} employee(s). PDF downloaded.`,
+      );
+      await loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to generate payroll.')
+      alert(
+        err instanceof Error ? err.message : "Failed to generate payroll.",
+      );
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
 
-  // ── Download payroll register PDF from existing payroll ─────────────────
+  // ── Toggle expand/collapse a payroll to show employees ────────────────────
+  const handleSelectPayroll = async (payrollId: string) => {
+    if (selectedPayrollId === payrollId) {
+      setSelectedPayrollId(null);
+      setPayrollSlips([]);
+      setEmpSearch("");
+      return;
+    }
+    setSelectedPayrollId(payrollId);
+    setPayrollSlips([]);
+    setEmpSearch("");
+    setSlipsLoading(true);
+    try {
+      const slips = await fetchPayrollPaySlips(payrollId);
+      setPayrollSlips(slips);
+    } catch {
+      setPayrollSlips([]);
+    } finally {
+      setSlipsLoading(false);
+    }
+  };
+
+  // ── Download payroll register PDF for any existing payroll ────────────────
   const handleDownloadPayrollPDF = async (payroll: PayrollPeriod) => {
     try {
-      const slips = await fetchPayrollPaySlips(payroll.id)
+      const slips = await fetchPayrollPaySlips(payroll.id);
       if (slips.length === 0) {
-        alert('No employees linked to this payroll.')
-        return
+        alert("No pay slips found for this payroll.");
+        return;
       }
       downloadPayrollRegisterPDF({
         companyName: LGU_NAME,
         companyAddress: LGU_ADDRESS,
         periodStart: payroll.date_from,
         periodEnd: payroll.date_to,
-        employees: slips.map(s => ({
+        employees: slips.map((s) => ({
           employeeName: s.employeeName,
           employeeNo: s.employeeNo,
           positionTitle: s.positionTitle,
@@ -144,20 +179,24 @@ const PayrollComputation = () => {
           totalDeductions: s.totalDeductions,
           netPay: s.netAmount,
         })),
-        preparedBy: 'System Administrator',
-      })
+        preparedBy: payroll.prepared_by ?? "System Administrator",
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to download payroll PDF.')
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to download payroll PDF.",
+      );
     }
-  }
+  };
 
-  // ── Download individual payslip PDF ─────────────────────────────────────
+  // ── Download individual payslip PDF ───────────────────────────────────────
   const handleDownloadPayslip = async (paySlipId: string) => {
     try {
-      const detail = await fetchPaySlipDetailForPDF(paySlipId)
+      const detail = await fetchPaySlipDetailForPDF(paySlipId);
       if (!detail) {
-        alert('Could not fetch pay slip details.')
-        return
+        alert("Could not fetch pay slip details.");
+        return;
       }
       const pdfData: PaySlipPDFData = {
         companyName: LGU_NAME,
@@ -177,253 +216,499 @@ const PayrollComputation = () => {
         deductions: detail.deductions,
         totalDeductions: detail.totalDeductions,
         netPay: detail.netPay,
-        preparedBy: 'System Administrator',
-      }
-      downloadPaySlipPDF(pdfData)
+        preparedBy: "System Administrator",
+      };
+      downloadPaySlipPDF(pdfData);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to generate payslip.')
+      alert(
+        err instanceof Error ? err.message : "Failed to generate payslip.",
+      );
     }
-  }
+  };
 
-  // ── Filtered payrolls ───────────────────────────────────────────────────
-  const filtered = payrolls.filter(p => {
-    const matchSearch = p.period_name.toLowerCase().includes(search.toLowerCase())
-    if (activeTab === 'all') return matchSearch
-    return matchSearch && p.status === activeTab
-  })
+  // ── Filter payrolls by tab + search ───────────────────────────────────────
+  const filtered = useMemo(() => {
+    return payrolls.filter((p) => {
+      const matchSearch = p.period_name
+        .toLowerCase()
+        .includes(search.toLowerCase());
+      if (activeTab === "all") return matchSearch;
+      return matchSearch && p.status === activeTab;
+    });
+  }, [payrolls, search, activeTab]);
 
-  const filteredEmps = payrollSlips.filter(s =>
-    s.employeeName.toLowerCase().includes(empSearch.toLowerCase()),
-  )
+  const { page, setPage, totalPages, pageItems, emptyRows, totalItems } =
+    usePagination(filtered);
 
-  // ── Stats ───────────────────────────────────────────────────────────────
-  const statusCount = (s: string) => payrolls.filter(p => p.status === s).length
-  const selectedPayroll = payrolls.find(p => p.id === selectedPayrollId)
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const countByStatus = (s: string) =>
+      payrolls.filter((p) => p.status === s).length;
+    const totalAmount = payrolls.reduce((sum, p) => sum + p.total_amount, 0);
+    return {
+      total: payrolls.length,
+      draft: countByStatus("draft"),
+      computed: countByStatus("computed"),
+      approved: countByStatus("approved"),
+      released: countByStatus("released"),
+      totalAmount,
+    };
+  }, [payrolls]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Tab definitions ───────────────────────────────────────────────────────
+  const tabDefs = useMemo(
+    () => [
+      { id: "all", label: "All", count: stats.total },
+      { id: "draft", label: "Draft", count: stats.draft },
+      { id: "computed", label: "Computed", count: stats.computed },
+      { id: "approved", label: "Approved", count: stats.approved },
+      { id: "released", label: "Released", count: stats.released },
+    ],
+    [stats],
+  );
+
+  // ── Filter employees within expanded payroll ─────────────────────────────
+  const filteredSlips = useMemo(() => {
+    if (!empSearch) return payrollSlips;
+    return payrollSlips.filter((s) =>
+      s.employeeName.toLowerCase().includes(empSearch.toLowerCase()),
+    );
+  }, [payrollSlips, empSearch]);
+
+  // ── Selected payroll reference ────────────────────────────────────────────
+  const selectedPayroll = payrolls.find((p) => p.id === selectedPayrollId);
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Payroll Computation"
-        subtitle="Generate payrolls from DTR records, download payroll sheets and individual payslips"
-        icon={<Calculator className="w-6 h-6" />}
-      />
-
-      {/* ── Period selector ── */}
-      <div className="flex flex-wrap gap-4 items-end p-4 bg-card rounded-lg border">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Period Start</label>
-          <input
-            type="date"
-            value={periodStart}
-            onChange={e => { setPeriodStart(e.target.value); setSearch('') }}
-            className="border rounded px-3 py-1.5 text-sm bg-background"
-          />
+    <PageShell
+      title="Payroll Computation"
+      subtitle="Generate payrolls from DTR records, download payroll sheets and individual payslips"
+      onRefresh={loadData}
+      isLoading={isLoading}
+      actions={
+        <AccentButton
+          onClick={handleGeneratePayroll}
+          disabled={isGenerating || employeeCount === 0}
+        >
+          <FileText className="w-4 h-4" />
+          {isGenerating ? "Generating..." : "Generate Payroll"}
+        </AccentButton>
+      }
+    >
+      {/* ── Period Selector ── */}
+      <Card className="p-4">
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted">
+              Period Start
+            </label>
+            <input
+              type="date"
+              value={periodStart}
+              onChange={(e) => {
+                setPeriodStart(e.target.value);
+                setSearch("");
+              }}
+              className="border border-border rounded-lg px-3 py-1.5 text-sm bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted">
+              Period End
+            </label>
+            <input
+              type="date"
+              value={periodEnd}
+              onChange={(e) => {
+                setPeriodEnd(e.target.value);
+                setSearch("");
+              }}
+              className="border border-border rounded-lg px-3 py-1.5 text-sm bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <span className="text-xs text-muted pb-1.5">
+            {employeeCount} employee(s) with DTR records in this period
+          </span>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Period End</label>
-          <input
-            type="date"
-            value={periodEnd}
-            onChange={e => { setPeriodEnd(e.target.value); setSearch('') }}
-            className="border rounded px-3 py-1.5 text-sm bg-background"
-          />
-        </div>
-        <span className="text-xs text-muted-foreground pb-1">
-          Employees with DTR records: <strong>{employeeCount}</strong>
-        </span>
-      </div>
+      </Card>
 
       {/* ── Stats ── */}
-      <StatsRow>
-        <StatCard label="Total Payrolls" value={payrolls.length} />
-        <StatCard label="Draft"          value={statusCount('draft')}    color="warning" />
-        <StatCard label="Computed"       value={statusCount('computed')} color="primary" />
-        <StatCard label="Approved"       value={statusCount('approved')} color="success" />
-        <StatCard label="Released"       value={statusCount('released')} color="success" />
-      </StatsRow>
-
-      {/* ── Tabs ── */}
-      <Tabs
-        tabs={[
-          { id: 'all',      label: 'All'      },
-          { id: 'draft',    label: 'Draft'    },
-          { id: 'computed', label: 'Computed' },
-          { id: 'approved', label: 'Approved' },
-          { id: 'released', label: 'Released' },
-        ]}
-        activeTab={activeTab}
-        onTabChange={tab => { setActiveTab(tab); setSearch(''); setSelectedPayrollId(null); setPayrollSlips([]) }}
-      />
-
-      {/* ── Actions ── */}
-      <ActionsBar>
-        <PrimaryButton onClick={loadData} disabled={isLoading}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </PrimaryButton>
-        <PrimaryButton onClick={handleGeneratePayroll} disabled={isGenerating || employeeCount === 0}>
-          <FileText className="w-4 h-4" />
-          {isGenerating ? 'Generating…' : 'Generate Payroll'}
-        </PrimaryButton>
-      </ActionsBar>
-
-      {/* ── Payrolls Table ── */}
-      <DataTable<PayrollPeriod>
-        data={filtered}
-        columns={[
-          { key: 'period_name', header: 'Period' },
-          { key: 'date_from',   header: 'From' },
-          { key: 'date_to',     header: 'To' },
-          { key: 'fiscal_year', header: 'FY' },
-          { key: 'fund_type',   header: 'Fund' },
-          {
-            key: 'total_amount',
-            header: 'Total Amount',
-            render: item => (
-              <span className="font-medium">{fmtPeso(item.total_amount)}</span>
-            ),
-          },
-          {
-            key: 'status',
-            header: 'Status',
-            render: item => (
-              <span className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                item.status === 'released'
-                  ? 'bg-success/10 text-success'
-                  : item.status === 'approved'
-                    ? 'bg-blue-500/10 text-blue-500'
-                    : item.status === 'computed'
-                      ? 'bg-purple-500/10 text-purple-500'
-                      : 'bg-warning/10 text-warning'
-              }`}>
-                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-              </span>
-            ),
-          },
-          {
-            key: 'id',
-            header: 'Actions',
-            render: item => (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDownloadPayrollPDF(item) }}
-                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded
-                    bg-primary/10 text-primary hover:bg-primary/20"
-                  title="Download payroll register PDF"
-                >
-                  <Download className="w-3 h-3" />
-                  Payroll
-                </button>
-                <button
-                  onClick={() => handleSelectPayroll(item.id)}
-                  className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded
-                    ${selectedPayrollId === item.id
-                      ? 'bg-primary text-white'
-                      : 'bg-muted text-foreground hover:bg-muted/80'
-                    }`}
-                  title="View employees & download payslips"
-                >
-                  <FileText className="w-3 h-3" />
-                  Payslips
-                </button>
-              </div>
-            ),
-          },
-        ]}
-        title={`Payrolls (${filtered.length})`}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by period name..."
-        emptyMessage="No payrolls found. Select a period and click Generate Payroll."
-      />
-
-      {/* ── Employees in Selected Payroll ── */}
-      {selectedPayrollId && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-1">
-            <h3 className="text-sm font-semibold">
-              Employees — {selectedPayroll?.period_name ?? ''}
-            </h3>
-            {slipsLoading && (
-              <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />
-            )}
-          </div>
-
-          <DataTable<PayrollPaySlipRow>
-            data={filteredEmps}
-            columns={[
-              { key: 'employeeName', header: 'Employee' },
-              {
-                key: 'rate',
-                header: 'Rate',
-                render: r => <span>{fmtPeso(r.rate)}</span>,
-              },
-              {
-                key: 'daysWorked',
-                header: 'Days',
-                render: r => <span className="font-medium">{r.daysWorked}</span>,
-              },
-              {
-                key: 'grossAmount',
-                header: 'Gross',
-                render: r => <span className="font-medium">{fmtPeso(r.grossAmount)}</span>,
-              },
-              {
-                key: 'totalDeductions',
-                header: 'Deductions',
-                render: r => <span className="text-red-500">{fmtPeso(r.totalDeductions)}</span>,
-              },
-              {
-                key: 'netAmount',
-                header: 'Net Pay',
-                render: r => (
-                  <span className="font-bold text-green-600">{fmtPeso(r.netAmount)}</span>
-                ),
-              },
-              {
-                key: 'status',
-                header: 'Status',
-                render: r => (
-                  <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                    r.status === 'released'
-                      ? 'bg-success/10 text-success'
-                      : r.status === 'approved'
-                        ? 'bg-blue-500/10 text-blue-500'
-                        : r.status === 'computed'
-                          ? 'bg-purple-500/10 text-purple-500'
-                          : 'bg-warning/10 text-warning'
-                  }`}>
-                    {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                  </span>
-                ),
-              },
-              {
-                key: 'paySlipId',
-                header: 'Payslip',
-                render: r => (
-                  <button
-                    onClick={() => handleDownloadPayslip(r.paySlipId)}
-                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded
-                      bg-primary/10 text-primary hover:bg-primary/20"
-                    title="Download individual payslip PDF"
-                  >
-                    <Download className="w-3 h-3" />
-                    PDF
-                  </button>
-                ),
-              },
-            ]}
-            title={`Employees (${filteredEmps.length})`}
-            searchValue={empSearch}
-            onSearchChange={setEmpSearch}
-            searchPlaceholder="Search by employee name..."
-            emptyMessage={slipsLoading ? 'Loading...' : 'No employees in this payroll.'}
+      <Section title="Overview">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatCard
+            label="Total Payrolls"
+            value={stats.total}
+            icon={<ReceiptText className="w-5 h-5" />}
+          />
+          <StatCard
+            label="Draft"
+            value={stats.draft}
+            icon={<FileText className="w-5 h-5" />}
+            accent="text-amber-500"
+          />
+          <StatCard
+            label="Computed"
+            value={stats.computed}
+            icon={<FileText className="w-5 h-5" />}
+            accent="text-violet-500"
+          />
+          <StatCard
+            label="Approved"
+            value={stats.approved}
+            icon={<FileText className="w-5 h-5" />}
+            accent="text-blue-500"
+          />
+          <StatCard
+            label="Total Amount"
+            value={fmtPeso(stats.totalAmount)}
+            icon={<DollarSign className="w-5 h-5" />}
+            accent="text-emerald-600 dark:text-emerald-400"
           />
         </div>
-      )}
-    </div>
-  )
-}
+      </Section>
 
-export default PayrollComputation
+      {/* ── Tab Bar ── */}
+      <TabBar
+        tabs={tabDefs}
+        active={activeTab}
+        onChange={(id) => {
+          setActiveTab(id);
+          setSearch("");
+          setSelectedPayrollId(null);
+          setPayrollSlips([]);
+        }}
+        className="overflow-x-auto"
+      />
+
+      {/* ── Search ── */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setSelectedPayrollId(null);
+            setPayrollSlips([]);
+          }}
+          placeholder="Search by period name..."
+          className="w-full pl-9 pr-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+        />
+      </div>
+
+      {/* ── Payroll Table ── */}
+      <Card>
+        {filtered.length === 0 ? (
+          <EmptyState message="No payroll records found. Select a period and click Generate Payroll." />
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                      Period Name
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                      From
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                      To
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                      FY
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                      Fund
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                      Total Amount
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-center">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-center">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pageItems.map((p) => (
+                    <tr
+                      key={p.id}
+                      className={`hover:bg-accent/5 transition-colors ${selectedPayrollId === p.id ? "bg-accent/5" : ""}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {p.period_name}
+                      </td>
+                      <td className="px-4 py-3 text-muted">{p.date_from}</td>
+                      <td className="px-4 py-3 text-muted">{p.date_to}</td>
+                      <td className="px-4 py-3 text-muted">{p.fiscal_year}</td>
+                      <td className="px-4 py-3 text-muted">{p.fund_type}</td>
+                      <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {fmtPeso(p.total_amount)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <PayrollBadge status={p.status} />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleDownloadPayrollPDF(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                            title="Download Payroll Register PDF"
+                          >
+                            <Download className="w-3 h-3" /> PDF
+                          </button>
+                          <button
+                            onClick={() => handleSelectPayroll(p.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                            title={
+                              selectedPayrollId === p.id
+                                ? "Collapse payslips"
+                                : "View payslips"
+                            }
+                          >
+                            {selectedPayrollId === p.id ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                            Payslips
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  <EmptyRows count={emptyRows} columns={8} />
+                </tbody>
+              </table>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                onPageChange={setPage}
+              />
+            </div>
+
+            {/* Mobile card list */}
+            <div className="md:hidden divide-y divide-border">
+              {pageItems.map((p) => (
+                <div key={p.id} className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-foreground text-sm leading-tight">
+                      {p.period_name}
+                    </p>
+                    <PayrollBadge status={p.status} />
+                  </div>
+                  <div className="text-xs text-muted space-y-0.5">
+                    <p>
+                      {p.date_from} to {p.date_to}
+                    </p>
+                    <p>
+                      {p.fund_type} &middot; FY {p.fiscal_year}
+                    </p>
+                  </div>
+                  <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {fmtPeso(p.total_amount)}
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleDownloadPayrollPDF(p)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                    >
+                      <Download className="w-3 h-3" /> PDF
+                    </button>
+                    <button
+                      onClick={() => handleSelectPayroll(p.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                    >
+                      {selectedPayrollId === p.id ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                      Payslips
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* ── Employee Sub-Table (expanded payroll) ── */}
+      {selectedPayrollId && (
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">
+              Employees — {selectedPayroll?.period_name ?? ""} (
+              {filteredSlips.length})
+            </h3>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+              <input
+                type="text"
+                value={empSearch}
+                onChange={(e) => setEmpSearch(e.target.value)}
+                placeholder="Search employee..."
+                className="w-full sm:w-56 pl-9 pr-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+              />
+            </div>
+          </div>
+
+          {slipsLoading ? (
+            <div className="flex items-center justify-center py-10 text-muted text-sm">
+              Loading employees...
+            </div>
+          ) : filteredSlips.length === 0 ? (
+            <EmptyState message="No employees found for this payroll." />
+          ) : (
+            <>
+              {/* Desktop employee table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                        Employee
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                        Rate
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                        Days
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                        Gross
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                        Deductions
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-right">
+                        Net Pay
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-center">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider text-center">
+                        Payslip
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredSlips.map((s) => (
+                      <tr
+                        key={s.id}
+                        className="hover:bg-accent/5 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-foreground">
+                            {s.employeeName}
+                          </div>
+                          <div className="text-xs text-muted">
+                            {s.positionTitle} &middot; {s.officeName}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {fmtPeso(s.rate)}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {s.daysWorked}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums">
+                          {fmtPeso(s.grossAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums text-red-600 dark:text-red-400">
+                          {fmtPeso(s.totalDeductions)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                          {fmtPeso(s.netAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <PayrollBadge status={s.status} />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleDownloadPayslip(s.paySlipId)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                            title="Download individual payslip PDF"
+                          >
+                            <Download className="w-3 h-3" /> PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile employee cards */}
+              <div className="md:hidden divide-y divide-border">
+                {filteredSlips.map((s) => (
+                  <div key={s.id} className="px-4 py-3 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {s.employeeName}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {s.positionTitle} &middot; {s.officeName}
+                        </p>
+                      </div>
+                      <PayrollBadge status={s.status} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div>
+                        <span className="text-muted">Rate:</span>{" "}
+                        <span className="font-medium tabular-nums">
+                          {fmtPeso(s.rate)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted">Days:</span>{" "}
+                        <span className="font-medium tabular-nums">
+                          {s.daysWorked}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted">Gross:</span>{" "}
+                        <span className="font-medium tabular-nums">
+                          {fmtPeso(s.grossAmount)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted">Deductions:</span>{" "}
+                        <span className="font-medium tabular-nums text-red-600 dark:text-red-400">
+                          {fmtPeso(s.totalDeductions)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted">Net Pay</span>
+                      <span className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {fmtPeso(s.netAmount)}
+                      </span>
+                    </div>
+                    <div className="pt-1">
+                      <button
+                        onClick={() => handleDownloadPayslip(s.paySlipId)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+                      >
+                        <Download className="w-3 h-3" /> Download Payslip
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+    </PageShell>
+  );
+};
+
+export default PayrollComputation;

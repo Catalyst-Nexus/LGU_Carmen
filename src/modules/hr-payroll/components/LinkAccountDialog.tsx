@@ -134,7 +134,7 @@ const LinkAccountDialog = ({
           ) : (
             <select
               id="link-account-select"
-              className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:border-success"
+              className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:outline-none focus:border-accent"
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(e.target.value)}
             >

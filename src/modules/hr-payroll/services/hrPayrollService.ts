@@ -3,7 +3,7 @@
  * Payroll periods, pay slips, deduction types, and remittance reports.
  * Covers: hr.deduction_type, hr.payroll, hr.pay_slip, hr.pay_slip_deductions
  */
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 import type {
   DeductionType,
   PayrollPeriod,
@@ -348,7 +348,7 @@ type AnyJoin = any;
 
 /** Unwrap a Supabase join that may be object or single-element array. */
 const unwrap = <T>(v: T | T[] | null): T | null =>
-  Array.isArray(v) ? v[0] ?? null : v;
+  Array.isArray(v) ? (v[0] ?? null) : v;
 
 /**
  * Generate a full payroll for the given period:
@@ -362,9 +362,14 @@ const unwrap = <T>(v: T | T[] | null): T | null =>
 export const generatePayroll = async (
   periodStart: string,
   periodEnd: string,
-  periodType: "first_half" | "second_half" | "monthly" | "special" = "first_half",
+  periodType:
+    | "first_half"
+    | "second_half"
+    | "monthly"
+    | "special" = "first_half",
 ): Promise<GeneratedPayrollResult> => {
-  if (!isSupabaseConfigured() || !supabase) throw new Error("Supabase not configured");
+  if (!isSupabaseConfigured() || !supabase)
+    throw new Error("Supabase not configured");
   const sb = supabase as NonNullable<typeof supabase>;
 
   // 1. Fetch complete time records for the period
@@ -381,10 +386,14 @@ export const generatePayroll = async (
     throw new Error("No complete time records found for this period.");
 
   // 2. Group time records by employee
-  const byEmployee = new Map<string, { ids: string[]; gross: number; dates: Set<string> }>();
+  const byEmployee = new Map<
+    string,
+    { ids: string[]; gross: number; dates: Set<string> }
+  >();
   for (const tr of timeRecords) {
     const perId = tr.per_id as string;
-    if (!byEmployee.has(perId)) byEmployee.set(perId, { ids: [], gross: 0, dates: new Set() });
+    if (!byEmployee.has(perId))
+      byEmployee.set(perId, { ids: [], gross: 0, dates: new Set() });
     const entry = byEmployee.get(perId)!;
     entry.ids.push(tr.id as string);
     entry.gross += Number(tr.pay_amount) || 0;
@@ -410,10 +419,13 @@ export const generatePayroll = async (
   const { data: dedTypes, error: dtErr } = await sb
     .schema("hr")
     .from("deduction_type")
-    .select("id, code, description, computation_type, default_rate, is_mandatory")
+    .select(
+      "id, code, description, computation_type, default_rate, is_mandatory",
+    )
     .eq("is_active", true)
     .eq("is_mandatory", true);
-  if (dtErr) throw new Error(`Failed to fetch deduction types: ${dtErr.message}`);
+  if (dtErr)
+    throw new Error(`Failed to fetch deduction types: ${dtErr.message}`);
 
   // 5. Fetch approved leave_outs in the period
   const { data: leaveOuts } = await sb
@@ -450,7 +462,12 @@ export const generatePayroll = async (
     const daysWorked = dates.size;
 
     // Compute mandatory deductions
-    const deductions: { deduction_type_id: string; code: string; label: string; amount: number }[] = [];
+    const deductions: {
+      deduction_type_id: string;
+      code: string;
+      label: string;
+      amount: number;
+    }[] = [];
     let totalDeductions = 0;
     for (const dt of dedTypes || []) {
       let amount = 0;
@@ -498,11 +515,20 @@ export const generatePayroll = async (
     slipIds.push(slipId);
 
     // Link time records
-    await sb.schema("hr").from("pay_slip_time_records").delete().eq("pay_slip_id", slipId);
     await sb
       .schema("hr")
       .from("pay_slip_time_records")
-      .insert(trIds.map((time_record_id) => ({ pay_slip_id: slipId, time_record_id })));
+      .delete()
+      .eq("pay_slip_id", slipId);
+    await sb
+      .schema("hr")
+      .from("pay_slip_time_records")
+      .insert(
+        trIds.map((time_record_id) => ({
+          pay_slip_id: slipId,
+          time_record_id,
+        })),
+      );
 
     // Upsert deductions
     if (deductions.length > 0) {
@@ -522,11 +548,20 @@ export const generatePayroll = async (
     // Link leave outs
     const empLeaves = leavesByEmployee.get(perId);
     if (empLeaves && empLeaves.length > 0) {
-      await sb.schema("hr").from("pay_slip_leave_outs").delete().eq("pay_slip_id", slipId);
       await sb
         .schema("hr")
         .from("pay_slip_leave_outs")
-        .insert(empLeaves.map((leave_out_id) => ({ pay_slip_id: slipId, leave_out_id })));
+        .delete()
+        .eq("pay_slip_id", slipId);
+      await sb
+        .schema("hr")
+        .from("pay_slip_leave_outs")
+        .insert(
+          empLeaves.map((leave_out_id) => ({
+            pay_slip_id: slipId,
+            leave_out_id,
+          })),
+        );
     }
 
     results.push({
@@ -544,7 +579,11 @@ export const generatePayroll = async (
       overtimeHours: 0,
       overtimePay: 0,
       grossAmount: Math.round(gross * 100) / 100,
-      deductions: deductions.map((d) => ({ code: d.code, label: d.label, amount: d.amount })),
+      deductions: deductions.map((d) => ({
+        code: d.code,
+        label: d.label,
+        amount: d.amount,
+      })),
       totalDeductions,
       netPay: Math.round((gross - totalDeductions) * 100) / 100,
     });
@@ -575,7 +614,10 @@ export const generatePayroll = async (
     await sb
       .schema("hr")
       .from("payroll")
-      .update({ total_amount: Math.round(totalGross * 100) / 100, status: "computed" })
+      .update({
+        total_amount: Math.round(totalGross * 100) / 100,
+        status: "computed",
+      })
       .eq("id", existing.id);
     payrollId = existing.id as string;
   } else {
@@ -593,17 +635,24 @@ export const generatePayroll = async (
       })
       .select("id")
       .single();
-    if (payrollErr || !payroll) throw new Error(`Failed to create payroll: ${payrollErr?.message}`);
+    if (payrollErr || !payroll)
+      throw new Error(`Failed to create payroll: ${payrollErr?.message}`);
     payrollId = payroll.id as string;
   }
 
   // 8. Link pay slips to payroll
-  await sb.schema("hr").from("payroll_pay_slips").delete().eq("payroll_id", payrollId);
+  await sb
+    .schema("hr")
+    .from("payroll_pay_slips")
+    .delete()
+    .eq("payroll_id", payrollId);
   if (slipIds.length > 0) {
     await sb
       .schema("hr")
       .from("payroll_pay_slips")
-      .insert(slipIds.map((pay_slip_id) => ({ payroll_id: payrollId, pay_slip_id })));
+      .insert(
+        slipIds.map((pay_slip_id) => ({ payroll_id: payrollId, pay_slip_id })),
+      );
   }
 
   return { payrollId, employees: results };

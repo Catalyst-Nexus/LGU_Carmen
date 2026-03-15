@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { BaseDialog, FormInput } from "@/components/ui/dialog";
 import type { LeaveApplication } from "@/types/hr.types";
-import type { LeaveSubtype, LeaveCredit } from "@/services/hrService";
+import type { LeaveSubtype, LeaveCredit } from "../services/hrService";
 import {
   fetchLeaveSubtypes,
   fetchPersonnelForLeave,
   fetchLeaveCredits,
   fetchHolidays,
-} from "@/services/hrService";
+} from "../services/hrService";
 
 interface LeaveDialogProps {
   open: boolean;
@@ -299,7 +299,7 @@ const LeaveDialog = ({
               id="employee"
               type="text"
               placeholder="Search employee by name..."
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={employeeSearch}
               onChange={(e) => {
                 setEmployeeSearch(e.target.value);
@@ -343,7 +343,7 @@ const LeaveDialog = ({
           </label>
           <select
             id="leave-type"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={leaveTypeId}
             onChange={(e) => {
               setLeaveTypeId(e.target.value);
@@ -370,7 +370,7 @@ const LeaveDialog = ({
               <div
                 className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg border ${
                   hasEnoughCredits
-                    ? "bg-success/10 text-success border-success/20"
+                    ? "bg-accent/10 text-accent border-accent/20"
                     : "bg-danger/10 text-danger border-danger/20"
                 }`}
               >
@@ -422,7 +422,7 @@ const LeaveDialog = ({
                     value="yes"
                     checked={hospitalized}
                     onChange={() => setHospitalized(true)}
-                    className="accent-success"
+                    className="accent-accent"
                   />
                   Yes (Hospitalized)
                 </label>
@@ -433,7 +433,7 @@ const LeaveDialog = ({
                     value="no"
                     checked={!hospitalized}
                     onChange={() => setHospitalized(false)}
-                    className="accent-success"
+                    className="accent-accent"
                   />
                   No (Out-Patient)
                 </label>
@@ -461,7 +461,7 @@ const LeaveDialog = ({
           <input
             id="applied-date"
             type="date"
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
             value={appliedDate}
             onChange={(e) => setAppliedDate(e.target.value)}
           />
@@ -483,7 +483,7 @@ const LeaveDialog = ({
               <input
                 id="date-from"
                 type="date"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
                 value={dateFrom}
                 onChange={(e) => {
                   setDateFrom(e.target.value);
@@ -502,7 +502,7 @@ const LeaveDialog = ({
               <input
                 id="date-to"
                 type="date"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
                 value={dateTo}
                 min={dateFrom}
                 onChange={(e) => setDateTo(e.target.value)}
@@ -582,7 +582,7 @@ const LeaveDialog = ({
             type="number"
             min="0"
             step="0.01"
-            className={`w-full px-3 py-2.5 border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success ${
+            className={`w-full px-3 py-2.5 border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent ${
               payAmountManual ? "border-warning" : "border-border"
             }`}
             value={displayPayAmount}

@@ -7,8 +7,8 @@ import {
   addHoliday,
   deleteHoliday,
   upsertHolidays,
-} from "@/services/hrService";
-import type { PhHoliday } from "@/services/hrService";
+} from "../services/hrService";
+import type { PhHoliday } from "../services/hrService";
 
 interface HolidayManagerDialogProps {
   open: boolean;
@@ -193,7 +193,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-foreground">Year:</label>
             <select
-              className="px-3 py-1.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="px-3 py-1.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
             >
@@ -292,7 +292,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
                 <label className="text-xs text-muted">Date *</label>
                 <input
                   type="date"
-                  className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                  className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
                   value={addDate}
                   onChange={(e) => setAddDate(e.target.value)}
                 />
@@ -302,7 +302,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
                 <input
                   type="text"
                   placeholder="e.g. City Foundation Day"
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
                   value={addDesc}
                   onChange={(e) => setAddDesc(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAdd()}
@@ -311,7 +311,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
               <div className="space-y-1">
                 <label className="text-xs text-muted">Type</label>
                 <select
-                  className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+                  className="px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
                   value={addType}
                   onChange={(e) =>
                     setAddType(e.target.value as PhHoliday["type"])
@@ -327,7 +327,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
               <button
                 onClick={handleAdd}
                 disabled={!addDate || !addDesc.trim() || adding}
-                className="flex items-center gap-1.5 px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 {adding ? "Adding..." : "Add"}
@@ -352,7 +352,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
           <div className="flex items-center gap-3 flex-wrap">
             <label className="text-sm font-medium text-foreground">Year:</label>
             <select
-              className="px-3 py-1.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-success"
+              className="px-3 py-1.5 border border-border rounded-lg text-sm bg-background text-foreground focus:outline-none focus:border-accent"
               value={importYear}
               onChange={(e) => {
                 setImportYear(Number(e.target.value));
@@ -386,7 +386,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
           )}
 
           {importMessage && (
-            <p className="text-sm text-success bg-success/5 px-3 py-2 rounded-lg border border-success/20">
+            <p className="text-sm text-accent bg-accent/5 px-3 py-2 rounded-lg border border-accent/20">
               {importMessage}
             </p>
           )}
@@ -439,7 +439,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
-                            className="accent-success"
+                            className="accent-accent"
                             checked={row.selected}
                             onChange={(e) => {
                               const updated = [...importRows];
@@ -460,7 +460,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
                         </td>
                         <td className="px-3 py-2">
                           <select
-                            className="w-full px-2 py-1 border border-border rounded text-xs bg-background text-foreground focus:outline-none focus:border-success"
+                            className="w-full px-2 py-1 border border-border rounded text-xs bg-background text-foreground focus:outline-none focus:border-accent"
                             value={row.type}
                             onChange={(e) => {
                               const updated = [...importRows];
@@ -489,7 +489,7 @@ const HolidayManagerDialog = ({ open, onClose }: HolidayManagerDialogProps) => {
               <button
                 onClick={handleImport}
                 disabled={importing || selectedCount === 0}
-                className="flex items-center gap-1.5 px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-accent-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {importing
                   ? "Importing..."

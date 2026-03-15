@@ -3,7 +3,7 @@
  * Reference / lookup data + Plantilla position management.
  * Covers: hr.office, hr.position, hr.salary_rate, hr.rate, hr.pos_type
  */
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 
 // =============================================================================
 // Interfaces

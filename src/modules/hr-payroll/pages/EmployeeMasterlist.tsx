@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  PageHeader,
-  StatsRow,
+  PageShell,
+  Section,
+  Card,
   StatCard,
-  ActionsBar,
-  PrimaryButton,
-  DataTable,
-  IconButton,
-} from "@/components/ui";
+  AccentButton,
+  GhostButton,
+  FilterSelect,
+  EmploymentBadge,
+  ActiveBadge,
+  EmptyState,
+  usePagination,
+  Pagination,
+  EmptyRows,
+} from "../components/ui";
 import {
   UserCheck,
   Plus,
@@ -20,6 +26,10 @@ import {
   MoreHorizontal,
   UserX,
   UserCheck2,
+  Search,
+  Users,
+  Briefcase,
+  FileText,
 } from "lucide-react";
 import type { Employee } from "@/types/hr.types";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
@@ -28,8 +38,8 @@ import {
   updateEmployee,
   deactivateEmployee,
   reinstateEmployee,
-} from "@/services/hrService";
-import type { EmployeeFormData } from "@/services/hrService";
+} from "../services/hrService";
+import type { EmployeeFormData } from "../services/hrService";
 import LinkAccountDialog from "../components/LinkAccountDialog";
 import EmployeeDialog from "../components/EmployeeDialog";
 import EmployeeProfile from "../components/EmployeeProfile";
@@ -112,7 +122,7 @@ const fetchPersonnel = async (): Promise<Employee[]> => {
     const pos = Array.isArray(row.position) ? row.position[0] : row.position;
     const off = Array.isArray(row.office) ? row.office[0] : row.office;
 
-    // Drill: position → salary_rate → rate → step
+    // Drill: position -> salary_rate -> rate -> step
     const srRaw = pos?.salary_rate;
     const srObj = Array.isArray(srRaw) ? srRaw[0] : srRaw;
     const rateRaw = srObj?.rate;
@@ -258,6 +268,8 @@ const EmployeeMasterlist = () => {
     filterPosition,
   ]);
 
+  const { page, setPage, totalPages, pageItems, emptyRows, totalItems } = usePagination(filtered);
+
   // All user_ids currently claimed — used by the dialog to exclude already-linked accounts
   const linkedUserIds = employees
     .filter((e) => e.user_id !== null)
@@ -311,115 +323,193 @@ const EmployeeMasterlist = () => {
     loadEmployees();
   };
 
-  // Derive employee status label
-  const getStatusLabel = (e: Employee): "Active" | "Separated" | "Inactive" => {
-    if (!e.is_active) {
-      return e.separation_date ? "Separated" : "Inactive";
-    }
-    return "Active";
-  };
+  const hasFilters =
+    filterOffice || filterType || filterStatus || filterSG || filterPosition;
+
+  /* ── Action menu for a single employee row ─────────────────────────── */
+  const renderActionMenu = (item: Employee) => (
+    <div className="relative" ref={openMenuId === item.id ? menuRef : null}>
+      <button
+        onClick={() =>
+          setOpenMenuId((prev) => (prev === item.id ? null : item.id))
+        }
+        title="Actions"
+        className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-muted/20 transition-colors"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+
+      {openMenuId === item.id && (
+        <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-surface border border-border rounded-lg shadow-lg py-1 text-sm">
+          <button
+            onClick={() => {
+              setSelectedEmployee(item);
+              setOpenMenuId(null);
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+          >
+            <Eye className="w-4 h-4 text-accent" />
+            View Profile
+          </button>
+          <button
+            onClick={() => {
+              setEditEmployee(item);
+              setOpenMenuId(null);
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            Edit Employee
+          </button>
+          <div className="border-t border-border my-1" />
+          <button
+            onClick={() => {
+              setLinkEmployee(item);
+              setOpenMenuId(null);
+            }}
+            className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
+          >
+            {item.user_id ? (
+              <Link2 className="w-4 h-4 text-accent" />
+            ) : (
+              <Link2Off className="w-4 h-4 text-muted" />
+            )}
+            {item.user_id ? "Manage Account Link" : "Link Account"}
+          </button>
+          <div className="border-t border-border my-1" />
+          {item.is_active ? (
+            <button
+              onClick={() => {
+                setDeactivateTarget(item);
+                setOpenMenuId(null);
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-danger/10 text-danger transition-colors"
+            >
+              <UserX className="w-4 h-4" />
+              Deactivate / Separate
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setOpenMenuId(null);
+                handleReinstate(item);
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-emerald-500/10 text-emerald-600 transition-colors"
+            >
+              <UserCheck2 className="w-4 h-4" />
+              Reinstate Employee
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Employee Masterlist"
-        subtitle="Complete employee records per CSC and DBM standards"
-        icon={<UserCheck className="w-6 h-6" />}
-      />
+    <PageShell
+      title="Employee Masterlist"
+      subtitle="Complete employee records per CSC and DBM standards"
+      actions={
+        <>
+          <AccentButton onClick={() => setShowAddDialog(true)}>
+            <Plus className="w-4 h-4" />
+            Add Employee
+          </AccentButton>
+          <GhostButton onClick={loadEmployees} disabled={isLoading}>
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </GhostButton>
+          <GhostButton onClick={() => {}}>
+            <Download className="w-3.5 h-3.5" />
+            Export
+          </GhostButton>
+        </>
+      }
+    >
+      {/* ── Stat Cards ──────────────────────────────────────────────── */}
+      <Section>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard
+            label="Total Employees"
+            value={employees.length}
+            icon={<Users className="w-5 h-5" />}
+          />
+          <StatCard
+            label="Active"
+            value={employees.filter((e) => e.is_active).length}
+            icon={<UserCheck className="w-5 h-5" />}
+            accent="text-emerald-600 dark:text-emerald-400"
+          />
+          <StatCard
+            label="Permanent"
+            value={
+              employees.filter((e) => e.employment_status === "permanent")
+                .length
+            }
+            icon={<Briefcase className="w-5 h-5" />}
+          />
+          <StatCard
+            label="Job Order"
+            value={
+              employees.filter((e) => e.employment_status === "job_order")
+                .length
+            }
+            icon={<FileText className="w-5 h-5" />}
+            accent="text-amber-600 dark:text-amber-400"
+          />
+        </div>
+      </Section>
 
-      <StatsRow>
-        <StatCard label="Total Employees" value={employees.length} />
-        <StatCard
-          label="Active"
-          value={employees.filter((e) => e.is_active).length}
-          color="success"
-        />
-        <StatCard
-          label="Permanent"
-          value={
-            employees.filter((e) => e.employment_status === "permanent").length
-          }
-          color="primary"
-        />
-        <StatCard
-          label="Job Order"
-          value={
-            employees.filter((e) => e.employment_status === "job_order").length
-          }
-          color="warning"
-        />
-      </StatsRow>
-
-      {/* Filter bar */}
+      {/* ── Filter Bar ──────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 items-center">
-        <select
+        <FilterSelect
           value={filterOffice}
-          onChange={(e) => setFilterOffice(e.target.value)}
-          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
-        >
-          <option value="">All Offices</option>
-          {uniqueOffices.map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          onChange={setFilterOffice}
+          placeholder="All Offices"
+          options={uniqueOffices.map((o) => ({ value: o, label: o }))}
+        />
 
-        <select
+        <FilterSelect
           value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
-        >
-          <option value="">All Employment Types</option>
-          <option value="permanent">Permanent</option>
-          <option value="casual">Casual</option>
-          <option value="coterminous">Coterminous</option>
-          <option value="contractual">Contractual</option>
-          <option value="job_order">Job Order</option>
-        </select>
+          onChange={setFilterType}
+          placeholder="All Employment Types"
+          options={[
+            { value: "permanent", label: "Permanent" },
+            { value: "casual", label: "Casual" },
+            { value: "coterminous", label: "Coterminous" },
+            { value: "contractual", label: "Contractual" },
+            { value: "job_order", label: "Job Order" },
+          ]}
+        />
 
-        <select
+        <FilterSelect
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
-        >
-          <option value="">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-          <option value="Separated">Separated</option>
-        </select>
+          onChange={setFilterStatus}
+          placeholder="All Statuses"
+          options={[
+            { value: "Active", label: "Active" },
+            { value: "Inactive", label: "Inactive" },
+            { value: "Separated", label: "Separated" },
+          ]}
+        />
 
-        <select
+        <FilterSelect
           value={filterSG}
-          onChange={(e) => setFilterSG(e.target.value)}
-          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
-        >
-          <option value="">All Salary Grades</option>
-          {uniqueSGs.map((sg) => (
-            <option key={sg} value={sg}>
-              {sg}
-            </option>
-          ))}
-        </select>
+          onChange={setFilterSG}
+          placeholder="All Salary Grades"
+          options={uniqueSGs.map((sg) => ({ value: sg, label: sg }))}
+        />
 
-        <select
+        <FilterSelect
           value={filterPosition}
-          onChange={(e) => setFilterPosition(e.target.value)}
-          className="text-sm border border-border rounded-lg px-3 py-2 bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-success/50"
-        >
-          <option value="">All Positions</option>
-          {uniquePositions.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
+          onChange={setFilterPosition}
+          placeholder="All Positions"
+          options={uniquePositions.map((p) => ({ value: p, label: p }))}
+        />
 
-        {(filterOffice ||
-          filterType ||
-          filterStatus ||
-          filterSG ||
-          filterPosition) && (
+        {hasFilters && (
           <button
             onClick={() => {
               setFilterOffice("");
@@ -428,194 +518,209 @@ const EmployeeMasterlist = () => {
               setFilterSG("");
               setFilterPosition("");
             }}
-            className="text-xs text-muted hover:text-foreground underline px-2 py-1"
+            className="text-xs text-muted hover:text-accent underline px-2 py-1 transition-colors"
           >
             Clear filters
           </button>
         )}
       </div>
 
-      <ActionsBar>
-        <PrimaryButton onClick={() => setShowAddDialog(true)}>
-          <Plus className="w-4 h-4" />
-          Add Employee
-        </PrimaryButton>
-        <PrimaryButton onClick={loadEmployees} disabled={isLoading}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </PrimaryButton>
-        <PrimaryButton onClick={() => {}}>
-          <Download className="w-4 h-4" />
-          Export
-        </PrimaryButton>
-      </ActionsBar>
+      {/* ── Table Card ──────────────────────────────────────────────── */}
+      <Card>
+        {/* Search bar */}
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name, ID, or position..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+              />
+            </div>
+            <span className="text-sm text-muted whitespace-nowrap tabular-nums">
+              {filtered.length} employee{filtered.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
 
-      <DataTable<Employee>
-        data={filtered}
-        columns={[
-          { key: "employee_no", header: "Employee ID" },
-          { key: "plantilla_item_no", header: "Plantilla Item" },
-          {
-            key: "last_name",
-            header: "Full Name",
-            render: (item) => (
-              <span>
-                {item.last_name}, {item.first_name}
-                {item.middle_name ? " " + item.middle_name[0] + "." : ""}
-              </span>
-            ),
-          },
-          { key: "position_title", header: "Position Title" },
-          {
-            key: "salary_grade",
-            header: "SG",
-            render: (item) => (
-              <span>
-                {item.salary_grade != null ? `SG-${item.salary_grade}` : "—"}
-              </span>
-            ),
-          },
-          {
-            key: "step",
-            header: "Step",
-            render: (item) => (
-              <span>{item.step != null ? `Step ${item.step}` : "—"}</span>
-            ),
-          },
-          { key: "office_name", header: "Office / Dept." },
-          {
-            key: "employment_status",
-            header: "Employment Status",
-            render: (item) => (
-              <span
-                className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                  item.employment_status === "permanent"
-                    ? "bg-green-500/10 text-green-500"
-                    : item.employment_status === "casual"
-                      ? "bg-blue-500/10 text-blue-500"
-                      : item.employment_status === "job_order"
-                        ? "bg-orange-500/10 text-orange-500"
-                        : item.employment_status === "contractual"
-                          ? "bg-purple-500/10 text-purple-500"
-                          : "bg-gray-500/10 text-gray-500"
-                }`}
-              >
-                {item.employment_status.replace(/_/g, " ").toUpperCase()}
-              </span>
-            ),
-          },
-          { key: "date_hired", header: "Appointment Date" },
-          {
-            key: "is_active",
-            header: "Status",
-            render: (item) => {
-              const label = getStatusLabel(item);
-              return (
-                <span
-                  className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                    label === "Active"
-                      ? "bg-success/10 text-success"
-                      : label === "Separated"
-                        ? "bg-danger/10 text-danger"
-                        : "bg-gray-500/10 text-gray-500"
-                  }`}
-                >
-                  {label}
-                </span>
-              );
-            },
-          },
-          {
-            key: "user_id",
-            header: "Actions",
-            render: (item) => (
-              <div
-                className="relative"
-                ref={openMenuId === item.id ? menuRef : null}
-              >
-                <IconButton
-                  onClick={() =>
-                    setOpenMenuId((prev) => (prev === item.id ? null : item.id))
-                  }
-                  title="Actions"
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                </IconButton>
+        {/* ── Desktop Table ──────────────────────────────────────────── */}
+        <div className="hidden md:block overflow-x-auto">
+          {filtered.length === 0 ? (
+            <EmptyState
+              message={
+                isLoading ? "Loading employees..." : "No employees found."
+              }
+            />
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Employee ID
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Plantilla Item
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Full Name
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Position Title
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    SG
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Step
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Office / Dept.
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Employment
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Appointment Date
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted text-xs uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/5 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-foreground font-mono text-xs">
+                      {item.employee_no}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {item.plantilla_item_no}
+                    </td>
+                    <td className="px-4 py-3 text-foreground font-medium">
+                      {item.last_name}, {item.first_name}
+                      {item.middle_name ? " " + item.middle_name[0] + "." : ""}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {item.position_title}
+                    </td>
+                    <td className="px-4 py-3 text-foreground tabular-nums">
+                      {item.salary_grade != null
+                        ? `SG-${item.salary_grade}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-foreground tabular-nums">
+                      {item.step != null ? `Step ${item.step}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {item.office_name}
+                    </td>
+                    <td className="px-4 py-3">
+                      <EmploymentBadge status={item.employment_status} />
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {item.date_hired}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ActiveBadge
+                        isActive={item.is_active}
+                        separationDate={item.separation_date}
+                      />
+                    </td>
+                    <td className="px-4 py-3">{renderActionMenu(item)}</td>
+                  </tr>
+                ))}
+                <EmptyRows count={emptyRows} columns={11} />
+              </tbody>
+            </table>
+          )}
+        </div>
 
-                {openMenuId === item.id && (
-                  <div className="absolute right-0 top-full mt-1 z-50 min-w-[170px] bg-background border border-border rounded-lg shadow-lg py-1 text-sm">
-                    <button
-                      onClick={() => {
-                        setSelectedEmployee(item);
-                        setOpenMenuId(null);
-                      }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
-                    >
-                      <Eye className="w-4 h-4 text-primary" />
-                      View Profile
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditEmployee(item);
-                        setOpenMenuId(null);
-                      }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
-                    >
-                      <Pencil className="w-4 h-4" />
-                      Edit Employee
-                    </button>
-                    <div className="border-t border-border my-1" />
-                    <button
-                      onClick={() => {
-                        setLinkEmployee(item);
-                        setOpenMenuId(null);
-                      }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-muted/20 transition-colors"
-                    >
-                      {item.user_id ? (
-                        <Link2 className="w-4 h-4 text-success" />
-                      ) : (
-                        <Link2Off className="w-4 h-4 text-muted" />
-                      )}
-                      {item.user_id ? "Manage Account Link" : "Link Account"}
-                    </button>
-                    <div className="border-t border-border my-1" />
-                    {item.is_active ? (
-                      <button
-                        onClick={() => {
-                          setDeactivateTarget(item);
-                          setOpenMenuId(null);
-                        }}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-danger/10 text-danger transition-colors"
-                      >
-                        <UserX className="w-4 h-4" />
-                        Deactivate / Separate
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setOpenMenuId(null);
-                          handleReinstate(item);
-                        }}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-success/10 text-success transition-colors"
-                      >
-                        <UserCheck2 className="w-4 h-4" />
-                        Reinstate Employee
-                      </button>
-                    )}
+        {/* ── Mobile Card List ───────────────────────────────────────── */}
+        <div className="md:hidden divide-y divide-border">
+          {filtered.length === 0 ? (
+            <EmptyState
+              message={
+                isLoading ? "Loading employees..." : "No employees found."
+              }
+            />
+          ) : (
+            pageItems.map((item) => (
+              <div key={item.id} className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {item.last_name}, {item.first_name}
+                      {item.middle_name ? " " + item.middle_name[0] + "." : ""}
+                    </p>
+                    <p className="text-xs text-muted truncate">
+                      {item.position_title}
+                    </p>
                   </div>
-                )}
-              </div>
-            ),
-          },
-        ]}
-        title={`Employees (${filtered.length})`}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by name, ID, or position..."
-        emptyMessage={isLoading ? "Loading employees…" : "No employees found."}
-      />
+                  {renderActionMenu(item)}
+                </div>
 
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <EmploymentBadge status={item.employment_status} />
+                  <ActiveBadge
+                    isActive={item.is_active}
+                    separationDate={item.separation_date}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div>
+                    <span className="text-muted">ID: </span>
+                    <span className="text-foreground font-mono">
+                      {item.employee_no}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">Plantilla: </span>
+                    <span className="text-foreground">
+                      {item.plantilla_item_no}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">SG: </span>
+                    <span className="text-foreground tabular-nums">
+                      {item.salary_grade != null
+                        ? `SG-${item.salary_grade}`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted">Step: </span>
+                    <span className="text-foreground tabular-nums">
+                      {item.step != null ? `Step ${item.step}` : "—"}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted">Office: </span>
+                    <span className="text-foreground">{item.office_name}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted">Appointed: </span>
+                    <span className="text-foreground">{item.date_hired}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <Pagination page={page} totalPages={totalPages} totalItems={totalItems} onPageChange={setPage} />
+      </Card>
+
+      {/* ── Dialogs (unchanged) ─────────────────────────────────────── */}
       <EmployeeDialog
         open={showAddDialog}
         onClose={() => setShowAddDialog(false)}
@@ -650,7 +755,7 @@ const EmployeeMasterlist = () => {
         onClose={() => setDeactivateTarget(null)}
         onConfirm={handleDeactivate}
       />
-    </div>
+    </PageShell>
   );
 };
 

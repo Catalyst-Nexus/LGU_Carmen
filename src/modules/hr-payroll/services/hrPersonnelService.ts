@@ -3,7 +3,7 @@
  * Personnel (employee) CRUD, CSC Form 241 service records,
  * and per-employee profile sub-queries (leave, pay slips, documents, audit).
  */
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured } from "@/services/supabase";
 import type { PayrollEntry, PaySlipDeduction } from "@/types/hr.types";
 
 // =============================================================================

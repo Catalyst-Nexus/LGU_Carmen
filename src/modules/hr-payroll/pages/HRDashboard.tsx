@@ -1,17 +1,31 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { PageHeader, StatsRow, StatCard, Tabs } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import {
   Users,
   Briefcase,
   CalendarOff,
-  UserCheck,
-  UserX,
-  Building2,
-  RefreshCw,
+  Clock,
   ChevronRight,
+  Building2,
+  ClipboardList,
+  Wallet,
+  ScanFace,
+  UserCheck,
+  UserMinus,
+  MapPin,
+  FileSpreadsheet,
+  Receipt,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/services/supabase";
+import {
+  PageShell,
+  Section,
+  Card,
+  StatCard,
+  EmploymentBadge,
+  EmptyState,
+} from "../components/ui";
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -70,10 +84,12 @@ interface PositionRow {
   is_filled: boolean;
   is_active: boolean;
 }
+
 interface OfficeRow {
   id: string;
   description: string;
 }
+
 interface LeaveRow {
   id: string;
 }
@@ -98,7 +114,7 @@ const emptyStats: DashboardStats = {
   recentHires: [],
 };
 
-/* ── Data fetch ────────────────────────────────────────────────────── */
+/* ── Data Fetch ────────────────────────────────────────────────────── */
 
 const fetchDashboardStats = async (): Promise<DashboardStats> => {
   if (!isSupabaseConfigured() || !supabase) return emptyStats;
@@ -128,14 +144,11 @@ const fetchDashboardStats = async (): Promise<DashboardStats> => {
   const breakdown: EmploymentBreakdown = {
     permanent: active.filter((p) => p.employment_status === "permanent").length,
     casual: active.filter((p) => p.employment_status === "casual").length,
-    coterminous: active.filter((p) => p.employment_status === "coterminous")
-      .length,
-    contractual: active.filter((p) => p.employment_status === "contractual")
-      .length,
+    coterminous: active.filter((p) => p.employment_status === "coterminous").length,
+    contractual: active.filter((p) => p.employment_status === "contractual").length,
     job_order: active.filter((p) => p.employment_status === "job_order").length,
   };
 
-  // Office distribution
   const officeMap = new Map<string, number>();
   active.forEach((p) => {
     const name = Array.isArray(p.office)
@@ -149,7 +162,6 @@ const fetchDashboardStats = async (): Promise<DashboardStats> => {
 
   const filledPositions = positions.filter((p) => p.is_filled).length;
 
-  // Recent hires — top 5
   const recentHires: RecentHire[] = active.slice(0, 5).map((p) => {
     const pos = Array.isArray(p.position) ? p.position[0] : p.position;
     const off = Array.isArray(p.office) ? p.office[0] : p.office;
@@ -178,24 +190,30 @@ const fetchDashboardStats = async (): Promise<DashboardStats> => {
   };
 };
 
-/* ── Status badge colours ──────────────────────────────────────────── */
+/* ── Config ────────────────────────────────────────────────────────── */
 
-const statusColor: Record<string, string> = {
-  permanent:
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  casual:
-    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  coterminous: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
-  contractual:
-    "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-  job_order:
-    "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-};
+const BREAKDOWN_ITEMS: { key: keyof EmploymentBreakdown; label: string; color: string }[] = [
+  { key: "permanent", label: "Permanent", color: "bg-accent" },
+  { key: "casual", label: "Casual", color: "bg-amber-500" },
+  { key: "coterminous", label: "Coterminous", color: "bg-sky-500" },
+  { key: "contractual", label: "Contractual", color: "bg-violet-500" },
+  { key: "job_order", label: "Job Order", color: "bg-orange-500" },
+];
+
+const QUICK_LINKS = [
+  { label: "Employee Masterlist", path: "/dashboard/hr-payroll/employees", icon: Users, desc: "View all personnel" },
+  { label: "Plantilla Positions", path: "/dashboard/hr-payroll/plantilla", icon: ClipboardList, desc: "DBM plantilla" },
+  { label: "Leave Management", path: "/dashboard/hr-payroll/leave", icon: CalendarOff, desc: "Applications & credits" },
+  { label: "Attendance & DTR", path: "/dashboard/hr-payroll/attendance", icon: Clock, desc: "Time records" },
+  { label: "Payroll", path: "/dashboard/hr-payroll/payroll", icon: Wallet, desc: "Computation & slips" },
+  { label: "Time Clock", path: "/dashboard/hr-payroll/time-clock", icon: ScanFace, desc: "Biometric clock" },
+  { label: "Salary Schedule", path: "/dashboard/hr-payroll/salary-schedule", icon: FileSpreadsheet, desc: "SG/Step rates" },
+  { label: "Remittance", path: "/dashboard/hr-payroll/remittance", icon: Receipt, desc: "Deduction reports" },
+];
 
 /* ── Component ─────────────────────────────────────────────────────── */
 
 const HRDashboard = () => {
-  const [activeTab, setActiveTab] = useState("overview");
   const [stats, setStats] = useState<DashboardStats>(emptyStats);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
@@ -211,268 +229,173 @@ const HRDashboard = () => {
     load();
   }, [load]);
 
-  const breakdownLabels: { key: keyof EmploymentBreakdown; label: string }[] = [
-    { key: "permanent", label: "Permanent" },
-    { key: "casual", label: "Casual" },
-    { key: "coterminous", label: "Coterminous" },
-    { key: "contractual", label: "Contractual" },
-    { key: "job_order", label: "Job Order" },
-  ];
-
-  const quickLinks = [
-    {
-      label: "Employee Masterlist",
-      path: "/dashboard/hr-payroll/employees",
-      icon: Users,
-    },
-    {
-      label: "Plantilla Positions",
-      path: "/dashboard/hr-payroll/plantilla",
-      icon: Briefcase,
-    },
-    {
-      label: "Leave Management",
-      path: "/dashboard/hr-payroll/leave",
-      icon: CalendarOff,
-    },
-    {
-      label: "Payroll Computation",
-      path: "/dashboard/hr-payroll/payroll",
-      icon: Briefcase,
-    },
-  ];
+  const maxOfficeCount = Math.max(...stats.officeDistribution.map((o) => o.count), 1);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <PageHeader
-          title="HR & Payroll Dashboard"
-          subtitle="Real-time overview of human resources, plantilla, and payroll"
-          icon={<Users className="w-6 h-6" />}
-        />
-        <button
-          onClick={load}
-          disabled={isLoading}
-          className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
+    <PageShell
+      title="HR & Payroll"
+      subtitle="Workforce overview and management"
+      onRefresh={load}
+      isLoading={isLoading}
+    >
+      {/* ── Workforce Stats ────────────────────────────────────────── */}
+      <Section title="Workforce">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="Total Employees" value={stats.totalEmployees} icon={<Users className="w-4 h-4" />} />
+          <StatCard label="Active" value={stats.activeEmployees} icon={<UserCheck className="w-4 h-4" />} accent="text-emerald-600" />
+          <StatCard label="Separated / Inactive" value={stats.inactiveEmployees} icon={<UserMinus className="w-4 h-4" />} accent="text-red-600" />
+          <StatCard label="Offices" value={stats.offices} icon={<Building2 className="w-4 h-4" />} />
+        </div>
+      </Section>
 
-      {/* ── Row 1 — Workforce ───────────────────────────────────────── */}
-      <StatsRow>
-        <StatCard
-          label="Total Employees"
-          value={stats.totalEmployees}
-          color="primary"
-        />
-        <StatCard
-          label="Active"
-          value={stats.activeEmployees}
-          color="success"
-        />
-        <StatCard
-          label="Inactive"
-          value={stats.inactiveEmployees}
-          color="danger"
-        />
-        <StatCard label="Offices" value={stats.offices} />
-      </StatsRow>
+      {/* ── Plantilla & Leave Stats ────────────────────────────────── */}
+      <Section title="Plantilla & Leave">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="Total Positions" value={stats.totalPositions} icon={<Briefcase className="w-4 h-4" />} />
+          <StatCard label="Filled" value={stats.filledPositions} icon={<UserCheck className="w-4 h-4" />} accent="text-emerald-600" />
+          <StatCard label="Vacant" value={stats.vacantPositions} icon={<MapPin className="w-4 h-4" />} accent="text-amber-600" />
+          <StatCard label="Pending Leaves" value={stats.pendingLeaves} icon={<CalendarOff className="w-4 h-4" />} accent="text-red-600" />
+        </div>
+      </Section>
 
-      {/* ── Row 2 — Plantilla & Leave ──────────────────────────────── */}
-      <StatsRow>
-        <StatCard label="Total Positions" value={stats.totalPositions} />
-        <StatCard
-          label="Filled"
-          value={stats.filledPositions}
-          color="success"
-        />
-        <StatCard
-          label="Vacant"
-          value={stats.vacantPositions}
-          color="warning"
-        />
-        <StatCard
-          label="Pending Leaves"
-          value={stats.pendingLeaves}
-          color="danger"
-        />
-      </StatsRow>
-
-      {/* ── Tabs ────────────────────────────────────────────────────── */}
-      <Tabs
-        tabs={[
-          { id: "overview", label: "Overview" },
-          { id: "offices", label: "By Office" },
-          { id: "recent", label: "Recent Hires" },
-        ]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-
-      {/* ── Overview Tab ────────────────────────────────────────────── */}
-      {activeTab === "overview" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Employment Breakdown */}
-          <div className="bg-surface border border-border rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-              <UserCheck className="w-5 h-5 text-success" />
-              Employment Breakdown
-            </h3>
+      {/* ── Analytics Row ──────────────────────────────────────────── */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Employment Breakdown</h3>
+          {stats.activeEmployees === 0 ? (
+            <EmptyState message="No active employees found." />
+          ) : (
             <div className="space-y-3">
-              {breakdownLabels.map(({ key, label }) => {
+              {BREAKDOWN_ITEMS.map(({ key, label, color }) => {
                 const count = stats.breakdown[key];
-                const pct =
-                  stats.activeEmployees > 0
-                    ? Math.round((count / stats.activeEmployees) * 100)
-                    : 0;
+                const pct = Math.round((count / stats.activeEmployees) * 100);
                 return (
                   <div key={key}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm text-muted">{label}</span>
-                      <span className="text-sm font-semibold text-primary">
-                        {count}{" "}
-                        <span className="text-xs text-muted font-normal">
-                          ({pct}%)
-                        </span>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", color)} />
+                        <span className="text-sm text-foreground">{label}</span>
+                      </div>
+                      <span className="text-sm tabular-nums font-medium text-foreground">
+                        {count}
+                        <span className="text-muted font-normal ml-1 text-xs">({pct}%)</span>
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
+                    <div className="w-full h-1.5 bg-border/60 rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          )}
+        </Card>
 
-          {/* Quick Links */}
-          <div className="bg-surface border border-border rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-success" />
-              Quick Links
-            </h3>
-            <div className="grid grid-cols-1 gap-3">
-              {quickLinks.map((link) => (
-                <button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 border border-transparent hover:border-border transition-all text-left group"
-                >
-                  <link.icon className="w-5 h-5 text-muted group-hover:text-success transition-colors" />
-                  <span className="flex-1 text-sm font-medium text-primary">
-                    {link.label}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-muted group-hover:translate-x-0.5 transition-transform" />
-                </button>
+        <Card className="p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Distribution by Office</h3>
+          {stats.officeDistribution.length === 0 ? (
+            <EmptyState message="No office data available." />
+          ) : (
+            <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+              {stats.officeDistribution.map(({ office, count }) => (
+                <div key={office} className="flex items-center gap-3">
+                  <span className="text-sm text-foreground truncate min-w-0 flex-1">{office}</span>
+                  <div className="w-28 sm:w-36 h-1.5 bg-border/60 rounded-full overflow-hidden shrink-0">
+                    <div
+                      className="h-full bg-accent rounded-full transition-all duration-500"
+                      style={{ width: `${(count / maxOfficeCount) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-sm tabular-nums font-medium text-foreground w-6 text-right shrink-0">{count}</span>
+                </div>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </Card>
+      </section>
 
-      {/* ── Offices Tab ─────────────────────────────────────────────── */}
-      {activeTab === "offices" && (
-        <div className="bg-surface border border-border rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-success" />
-            Employee Distribution by Office
-          </h3>
-          {stats.officeDistribution.length === 0 ? (
-            <p className="text-sm text-muted">No office data available.</p>
+      {/* ── Quick Navigation ───────────────────────────────────────── */}
+      <Section title="Quick Navigation">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {QUICK_LINKS.map((link) => (
+            <button
+              key={link.path}
+              onClick={() => navigate(link.path)}
+              className="group flex items-start gap-3 p-4 bg-surface border border-border rounded-xl text-left hover:border-accent/40 hover:shadow-sm transition-all"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/8 text-accent shrink-0 group-hover:bg-accent group-hover:text-white transition-colors">
+                <link.icon className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-foreground block leading-tight">{link.label}</span>
+                <span className="text-xs text-muted mt-0.5 block">{link.desc}</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-border group-hover:text-accent ml-auto shrink-0 mt-0.5 transition-colors" />
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      {/* ── Recent Hires ───────────────────────────────────────────── */}
+      <Section title="Recent Hires">
+        <Card className="overflow-hidden">
+          {stats.recentHires.length === 0 ? (
+            <EmptyState message="No personnel records found." />
           ) : (
-            <div className="space-y-3">
-              {stats.officeDistribution.map(({ office, count }) => {
-                const pct =
-                  stats.activeEmployees > 0
-                    ? Math.round((count / stats.activeEmployees) * 100)
-                    : 0;
-                return (
-                  <div key={office}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm text-muted truncate max-w-[60%]">
-                        {office}
-                      </span>
-                      <span className="text-sm font-semibold text-primary">
-                        {count}{" "}
-                        <span className="text-xs text-muted font-normal">
-                          ({pct}%)
-                        </span>
-                      </span>
+            <>
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-background/60">
+                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted">Name</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted">Position</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted">Office</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted">Date Hired</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-muted">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {stats.recentHires.map((hire) => (
+                      <tr key={hire.id} className="hover:bg-background/40 transition-colors">
+                        <td className="py-3 px-4 font-medium text-foreground">{hire.name}</td>
+                        <td className="py-3 px-4 text-muted">{hire.position}</td>
+                        <td className="py-3 px-4 text-muted">{hire.office}</td>
+                        <td className="py-3 px-4 text-muted tabular-nums">
+                          {new Date(hire.date_hired).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                        </td>
+                        <td className="py-3 px-4">
+                          <EmploymentBadge status={hire.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile card list */}
+              <div className="md:hidden divide-y divide-border">
+                {stats.recentHires.map((hire) => (
+                  <div key={hire.id} className="p-4 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm text-foreground">{hire.name}</span>
+                      <EmploymentBadge status={hire.status} />
                     </div>
-                    <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
+                    <p className="text-xs text-muted">{hire.position}</p>
+                    <div className="flex items-center justify-between text-xs text-muted">
+                      <span>{hire.office}</span>
+                      <span className="tabular-nums">
+                        {new Date(hire.date_hired).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            </>
           )}
-        </div>
-      )}
-
-      {/* ── Recent Hires Tab ────────────────────────────────────────── */}
-      {activeTab === "recent" && (
-        <div className="bg-surface border border-border rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2">
-            <UserX className="w-5 h-5 text-success" />
-            Recent Hires
-          </h3>
-          {stats.recentHires.length === 0 ? (
-            <p className="text-sm text-muted">No personnel records found.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-muted">
-                    <th className="pb-3 font-medium">Name</th>
-                    <th className="pb-3 font-medium">Position</th>
-                    <th className="pb-3 font-medium">Office</th>
-                    <th className="pb-3 font-medium">Date Hired</th>
-                    <th className="pb-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {stats.recentHires.map((hire) => (
-                    <tr
-                      key={hire.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                    >
-                      <td className="py-3 font-medium text-primary">
-                        {hire.name}
-                      </td>
-                      <td className="py-3 text-muted">{hire.position}</td>
-                      <td className="py-3 text-muted">{hire.office}</td>
-                      <td className="py-3 text-muted">
-                        {new Date(hire.date_hired).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </td>
-                      <td className="py-3">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${statusColor[hire.status] || "bg-gray-100 text-gray-600"}`}
-                        >
-                          {hire.status.replace("_", " ")}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        </Card>
+      </Section>
+    </PageShell>
   );
 };
 

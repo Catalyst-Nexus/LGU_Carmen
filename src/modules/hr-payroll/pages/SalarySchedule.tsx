@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader, ActionsBar, PrimaryButton } from "@/components/ui";
-import { DollarSign, RefreshCw, Save, Pencil, X } from "lucide-react";
-import { fetchRates, updateRate } from "@/services/hrService";
-import type { RateRow } from "@/services/hrService";
+import { PageShell, Card, AccentButton, GhostButton } from "../components/ui";
+import { Save, Pencil, X } from "lucide-react";
+import { fetchRates, updateRate } from "../services/hrService";
+import type { RateRow } from "../services/hrService";
 
 const STEPS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -82,55 +82,42 @@ const SalarySchedule = () => {
   const totalPositions = rates.filter((r) => r.sg_number !== null).length;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Salary Schedule"
-        subtitle="DBM Salary Standardization — adjust rates to match your LGU's salary ordinance"
-        icon={<DollarSign className="w-6 h-6" />}
-      />
-
-      <ActionsBar>
-        {!editMode ? (
-          <>
-            <PrimaryButton onClick={() => setEditMode(true)}>
-              <Pencil className="w-4 h-4" />
-              Edit Rates
-            </PrimaryButton>
-            <PrimaryButton onClick={loadRates}>
-              <RefreshCw
-                className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </PrimaryButton>
-          </>
+    <PageShell
+      title="Salary Schedule"
+      subtitle="DBM Salary Standardization — adjust rates to match your LGU's salary ordinance"
+      onRefresh={!editMode ? loadRates : undefined}
+      isLoading={isLoading}
+      actions={
+        !editMode ? (
+          <AccentButton onClick={() => setEditMode(true)}>
+            <Pencil className="w-4 h-4" />
+            Edit Rates
+          </AccentButton>
         ) : (
           <>
-            <PrimaryButton
-              onClick={handleSave}
-              disabled={!hasChanges || saving}
-            >
+            <AccentButton onClick={handleSave} disabled={!hasChanges || saving}>
               <Save className="w-4 h-4" />
               {saving
                 ? "Saving..."
                 : `Save Changes (${Object.keys(edits).length})`}
-            </PrimaryButton>
-            <PrimaryButton onClick={handleCancel}>
+            </AccentButton>
+            <GhostButton onClick={handleCancel}>
               <X className="w-4 h-4" />
               Cancel
-            </PrimaryButton>
+            </GhostButton>
           </>
-        )}
-      </ActionsBar>
-
+        )
+      }
+    >
       {editMode && (
-        <div className="px-4 py-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-sm">
+        <div className="px-4 py-2 rounded-lg bg-accent/10 border border-accent/30 text-accent text-sm">
           Editing mode — click on any amount to change it. Changes are saved in
           bulk.
         </div>
       )}
 
       {/* Main salary grid */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <Card>
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">
             Monthly Salary Schedule — SG 1–33, Steps 1–8
@@ -143,8 +130,8 @@ const SalarySchedule = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/30 border-b border-border">
-                <th className="px-4 py-3 text-left font-semibold text-foreground sticky left-0 bg-muted/30 z-10 min-w-[80px]">
+              <tr className="bg-accent/5 border-b border-border">
+                <th className="px-4 py-3 text-left font-semibold text-foreground sticky left-0 bg-accent/5 z-10 min-w-[80px]">
                   SG
                 </th>
                 {STEPS.map((s) => (
@@ -165,7 +152,7 @@ const SalarySchedule = () => {
                     key={sg}
                     className="border-b border-border hover:bg-muted/10 transition-colors"
                   >
-                    <td className="px-4 py-2.5 font-semibold text-foreground sticky left-0 bg-card z-10">
+                    <td className="px-4 py-2.5 font-semibold text-foreground sticky left-0 bg-surface z-10">
                       SG-{sg}
                     </td>
                     {STEPS.map((step) => {
@@ -189,7 +176,7 @@ const SalarySchedule = () => {
                               type="number"
                               min={0}
                               step={0.01}
-                              className={`w-full text-right text-sm px-2 py-1 border rounded bg-background text-foreground focus:outline-none focus:border-success ${
+                              className={`w-full text-right text-sm px-2 py-1 border rounded bg-background text-foreground focus:outline-none focus:border-accent ${
                                 isEdited
                                   ? "border-warning bg-warning/5"
                                   : "border-border"
@@ -213,11 +200,11 @@ const SalarySchedule = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Job Order / Non-SG rates */}
       {joRates.length > 0 && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <Card>
           <div className="px-5 py-3 border-b border-border">
             <h3 className="text-sm font-semibold text-foreground">
               Non-SG Rates (Job Orders, etc.)
@@ -240,7 +227,7 @@ const SalarySchedule = () => {
                       type="number"
                       min={0}
                       step={0.01}
-                      className={`w-40 text-right text-sm px-2 py-1 border rounded bg-background text-foreground focus:outline-none focus:border-success ${
+                      className={`w-40 text-right text-sm px-2 py-1 border rounded bg-background text-foreground focus:outline-none focus:border-accent ${
                         isEdited
                           ? "border-warning bg-warning/5"
                           : "border-border"
@@ -257,9 +244,9 @@ const SalarySchedule = () => {
               );
             })}
           </div>
-        </div>
+        </Card>
       )}
-    </div>
+    </PageShell>
   );
 };
 

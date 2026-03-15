@@ -30,7 +30,7 @@ import {
   type LeaveCredit,
   type PersonnelDocument,
   type PersonnelAuditEntry,
-} from "@/services/hrService";
+} from "../services/hrService";
 import ServiceRecordDialog from "./ServiceRecordDialog";
 
 // ---------------------------------------------------------------------------
@@ -74,14 +74,14 @@ const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
 );
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <h4 className="text-xs font-semibold text-success uppercase tracking-wider border-b border-border pb-1 mb-3">
+  <h4 className="text-xs font-semibold text-accent uppercase tracking-wider border-b border-border pb-1 mb-3">
     {children}
   </h4>
 );
 
 const Spinner = () => (
   <div className="flex items-center justify-center h-32">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-success" />
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent" />
   </div>
 );
 
@@ -420,7 +420,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
           </h3>
           <button
             onClick={() => setShowRecordDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Record
@@ -607,7 +607,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
                   <button
                     onClick={handleSaveCredit}
                     disabled={savingCredit}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-60"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-60"
                   >
                     <Check className="w-3.5 h-3.5" />
                     {savingCredit ? "Saving…" : "Save"}
@@ -667,7 +667,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
                         </thead>
                         <tbody>
                           {/* Opening row */}
-                          <tr className="border-b border-border/40 bg-success/5">
+                          <tr className="border-b border-border/40 bg-accent/5">
                             <td className="py-1.5 pr-4 text-muted">—</td>
                             <td className="py-1.5 pr-4 font-medium text-foreground">
                               Opening Balance
@@ -874,7 +874,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
                 <Field
                   label="Net Pay"
                   value={
-                    <span className="font-bold text-success">
+                    <span className="font-bold text-accent">
                       ₱{ps.net_amount.toLocaleString()}
                     </span>
                   }
@@ -952,7 +952,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
                 onClick={() => setActiveTab(id)}
                 className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeTab === id
-                    ? "border-success text-success"
+                    ? "border-accent text-accent"
                     : "border-transparent text-muted hover:text-foreground"
                 }`}
               >
@@ -1022,7 +1022,7 @@ const EmployeeProfile = ({ employee, onClose }: EmployeeProfileProps) => {
                                       href={doc.file_path}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-success underline underline-offset-2 hover:opacity-80"
+                                      className="text-accent underline underline-offset-2 hover:opacity-80"
                                     >
                                       {doc.file_name}
                                     </a>

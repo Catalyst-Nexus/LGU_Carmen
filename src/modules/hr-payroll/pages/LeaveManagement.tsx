@@ -1,21 +1,32 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  PageHeader,
-  StatsRow,
+  PageShell,
+  Section,
   StatCard,
-  ActionsBar,
-  PrimaryButton,
-  DataTable,
-  Tabs,
-} from "@/components/ui";
+  AccentButton,
+  GhostButton,
+  TabBar,
+  LeaveBadge,
+  Card,
+  fmtPeso,
+  EmptyState,
+  usePagination,
+  Pagination,
+  EmptyRows,
+} from "../components/ui";
 import {
   CalendarOff,
   Plus,
-  RefreshCw,
+  CalendarDays,
   Check,
   X,
   Ban,
-  CalendarDays,
+  Search,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  FileX2,
 } from "lucide-react";
 import type { LeaveApplication } from "@/types/hr.types";
 import {
@@ -24,8 +35,8 @@ import {
   updateLeaveApplication,
   clearLeaveOutDates,
   fetchPersonnelIdByUserId,
-} from "@/services/hrService";
-import type { LeaveApplicationFormData } from "@/services/hrService";
+} from "../services/hrService";
+import type { LeaveApplicationFormData } from "../services/hrService";
 import { useAuthStore } from "@/store/authStore";
 import LeaveDialog from "../components/LeaveDialog";
 import type { LeaveFormData } from "../components/LeaveDialog";
@@ -116,196 +127,303 @@ const LeaveManagement = () => {
     return matchSearch && l.status === activeTab;
   });
 
+  const { page, setPage, totalPages, pageItems, emptyRows, totalItems } = usePagination(filtered);
+
+  const pendingCount = leaves.filter((l) => l.status === "pending").length;
+  const approvedCount = leaves.filter((l) => l.status === "approved").length;
+  const deniedCount = leaves.filter((l) => l.status === "denied").length;
+  const cancelledCount = leaves.filter((l) => l.status === "cancelled").length;
+
+  /* ── CSC Form 6 detail line ──────────────────────────────────────── */
+  const renderDetails = (item: LeaveApplication) => {
+    if (!item.details) return null;
+    return (
+      <div className="text-xs text-muted mt-0.5">
+        {item.leave_type === "VL" &&
+          typeof item.details.place_visited === "string" && (
+            <span>{item.details.place_visited}</span>
+          )}
+        {item.leave_type === "SL" &&
+          typeof item.details.illness === "string" && (
+            <span>
+              {item.details.illness}
+              {item.details.hospitalized ? " (Hosp.)" : ""}
+            </span>
+          )}
+      </div>
+    );
+  };
+
+  /* ── Action buttons for pending rows ─────────────────────────────── */
+  const renderActions = (item: LeaveApplication) => {
+    if (item.status !== "pending")
+      return <span className="text-xs text-muted">&mdash;</span>;
+
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => handleStatusChange(item.id, "approved")}
+          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+          title="Approve"
+        >
+          <Check className="w-3.5 h-3.5" />
+          Approve
+        </button>
+        <button
+          onClick={() => handleStatusChange(item.id, "denied")}
+          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+          title="Deny"
+        >
+          <X className="w-3.5 h-3.5" />
+          Deny
+        </button>
+        <button
+          onClick={() => handleStatusChange(item.id, "cancelled")}
+          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+          title="Cancel"
+        >
+          <Ban className="w-3.5 h-3.5" />
+          Cancel
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Leave Management"
-        subtitle="Leave applications and tracking per CSC rules"
-        icon={<CalendarOff className="w-6 h-6" />}
-      />
+    <PageShell
+      title="Leave Management"
+      subtitle="Leave applications and tracking per CSC rules"
+      onRefresh={loadLeaves}
+      isLoading={isLoading}
+      actions={
+        <>
+          <AccentButton onClick={() => setShowFileDialog(true)}>
+            <Plus className="w-4 h-4" />
+            File Leave
+          </AccentButton>
+          <GhostButton onClick={() => setShowHolidayDialog(true)}>
+            <CalendarDays className="w-4 h-4" />
+            Manage Holidays
+          </GhostButton>
+        </>
+      }
+    >
+      {/* ── Stats ──────────────────────────────────────────────────────── */}
+      <Section>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatCard
+            label="Total Applications"
+            value={leaves.length}
+            icon={<CalendarOff className="w-5 h-5" />}
+          />
+          <StatCard
+            label="Pending"
+            value={pendingCount}
+            icon={<Clock className="w-5 h-5" />}
+            accent="text-amber-500"
+          />
+          <StatCard
+            label="Approved"
+            value={approvedCount}
+            icon={<CheckCircle2 className="w-5 h-5" />}
+            accent="text-accent"
+          />
+          <StatCard
+            label="Denied"
+            value={deniedCount}
+            icon={<XCircle className="w-5 h-5" />}
+            accent="text-red-500"
+          />
+          <StatCard
+            label="Cancelled"
+            value={cancelledCount}
+            icon={<AlertCircle className="w-5 h-5" />}
+          />
+        </div>
+      </Section>
 
-      <StatsRow>
-        <StatCard label="Total Applications" value={leaves.length} />
-        <StatCard
-          label="Pending"
-          value={leaves.filter((l) => l.status === "pending").length}
-          color="warning"
+      {/* ── Tabs + Search ──────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <TabBar
+          tabs={[
+            { id: "all", label: "All", count: leaves.length },
+            { id: "pending", label: "Pending", count: pendingCount },
+            { id: "approved", label: "Approved", count: approvedCount },
+            { id: "denied", label: "Denied", count: deniedCount },
+            { id: "cancelled", label: "Cancelled", count: cancelledCount },
+          ]}
+          active={activeTab}
+          onChange={setActiveTab}
         />
-        <StatCard
-          label="Approved"
-          value={leaves.filter((l) => l.status === "approved").length}
-          color="success"
-        />
-        <StatCard
-          label="Denied"
-          value={leaves.filter((l) => l.status === "denied").length}
-          color="danger"
-        />
-        <StatCard
-          label="Cancelled"
-          value={leaves.filter((l) => l.status === "cancelled").length}
-        />
-      </StatsRow>
 
-      <Tabs
-        tabs={[
-          { id: "all", label: "All" },
-          { id: "pending", label: "Pending" },
-          { id: "approved", label: "Approved" },
-          { id: "denied", label: "Denied" },
-          { id: "cancelled", label: "Cancelled" },
-        ]}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by employee name..."
+            className="w-full sm:w-64 pl-9 pr-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 transition-colors"
+          />
+        </div>
+      </div>
 
-      <ActionsBar>
-        <PrimaryButton onClick={() => setShowFileDialog(true)}>
-          <Plus className="w-4 h-4" />
-          File Leave
-        </PrimaryButton>
-        <PrimaryButton onClick={loadLeaves}>
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </PrimaryButton>
-        <PrimaryButton onClick={() => setShowHolidayDialog(true)}>
-          <CalendarDays className="w-4 h-4" />
-          Manage Holidays
-        </PrimaryButton>
-      </ActionsBar>
-
-      <DataTable<LeaveApplication>
-        data={filtered}
-        columns={[
-          { key: "employee_name", header: "Employee" },
-          {
-            key: "leave_type",
-            header: "Type",
-            render: (item) => (
-              <div>
-                <span title={item.leave_type_desc}>{item.leave_type}</span>
-                {item.details && (
-                  <div className="text-xs text-muted mt-0.5">
-                    {item.leave_type === "VL" &&
-                      typeof item.details.place_visited === "string" && (
-                        <span>{item.details.place_visited}</span>
-                      )}
-                    {item.leave_type === "SL" &&
-                      typeof item.details.illness === "string" && (
-                        <span>
-                          {item.details.illness}
-                          {item.details.hospitalized ? " (Hosp.)" : ""}
+      {/* ── Data ───────────────────────────────────────────────────────── */}
+      <Card>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={<FileX2 className="w-10 h-10 mb-2 opacity-40" />}
+            message="No leave applications found."
+          />
+        ) : (
+          <>
+            {/* ── Desktop Table ───────────────────────────────────────── */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wider text-muted">
+                    <th className="px-4 py-3">Employee</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Date Filed</th>
+                    <th className="px-4 py-3 text-right">Days</th>
+                    <th className="px-4 py-3 text-right">Bal. Before</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Date of Action</th>
+                    <th className="px-4 py-3">Approved By</th>
+                    <th className="px-4 py-3 text-right">Pay Amount</th>
+                    <th className="px-4 py-3">Remarks</th>
+                    <th className="px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pageItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="hover:bg-accent/5 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground whitespace-nowrap">
+                        {item.employee_name}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span title={item.leave_type_desc}>
+                          {item.leave_type}
                         </span>
-                      )}
-                  </div>
-                )}
-              </div>
-            ),
-          },
-          { key: "applied_date", header: "Date Filed" },
-          {
-            key: "credits",
-            header: "No. of Days",
-            render: (item) => <span>{item.credits}</span>,
-          },
-          {
-            key: "credit_balance_before",
-            header: "Balance Before",
-            render: (item) => (
-              <span>
-                {item.credit_balance_before != null
-                  ? item.credit_balance_before.toFixed(3)
-                  : "—"}
-              </span>
-            ),
-          },
-          {
-            key: "status",
-            header: "Status",
-            render: (item) => (
-              <span
-                className={`inline-block px-3 py-1 text-xs font-medium rounded-full ${
-                  item.status === "approved"
-                    ? "bg-success/10 text-success"
-                    : item.status === "pending"
-                      ? "bg-warning/10 text-warning"
-                      : item.status === "denied"
-                        ? "bg-danger/10 text-danger"
-                        : "bg-gray-500/10 text-gray-500"
-                }`}
-              >
-                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-              </span>
-            ),
-          },
-          {
-            key: "approved_date",
-            header: "Date of Action",
-            render: (item) => <span>{item.approved_date ?? "—"}</span>,
-          },
-          {
-            key: "approved_by_name",
-            header: "Approved By",
-            render: (item) => <span>{item.approved_by_name ?? "—"}</span>,
-          },
-          {
-            key: "pay_amount",
-            header: "Pay Amount",
-            render: (item) => (
-              <span>
-                {item.pay_amount
-                  ? new Intl.NumberFormat("en-PH", {
-                      style: "currency",
-                      currency: "PHP",
-                    }).format(item.pay_amount)
-                  : "—"}
-              </span>
-            ),
-          },
-          { key: "remarks", header: "Remarks" },
-          {
-            key: "id" as keyof LeaveApplication,
-            header: "Actions",
-            render: (item) =>
-              item.status === "pending" ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleStatusChange(item.id, "approved")}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"
-                    title="Approve"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleStatusChange(item.id, "denied")}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-danger/10 text-danger hover:bg-danger/20 transition-colors"
-                    title="Deny"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    Deny
-                  </button>
-                  <button
-                    onClick={() => handleStatusChange(item.id, "cancelled")}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-500/10 text-gray-500 hover:bg-gray-500/20 transition-colors"
-                    title="Cancel"
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <span className="text-xs text-muted">—</span>
-              ),
-          },
-        ]}
-        title={`Leave Applications (${filtered.length})`}
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search by employee name..."
-        emptyMessage="No leave applications found."
-      />
+                        {renderDetails(item)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.applied_date}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {item.credits}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {item.credit_balance_before != null
+                          ? item.credit_balance_before.toFixed(3)
+                          : "\u2014"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <LeaveBadge status={item.status} />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.approved_date ?? "\u2014"}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.approved_by_name ?? "\u2014"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                        {item.pay_amount ? fmtPeso(item.pay_amount) : "\u2014"}
+                      </td>
+                      <td className="px-4 py-3 text-muted max-w-[180px] truncate">
+                        {item.remarks || "\u2014"}
+                      </td>
+                      <td className="px-4 py-3">{renderActions(item)}</td>
+                    </tr>
+                  ))}
+                  <EmptyRows count={emptyRows} columns={11} />
+                </tbody>
+              </table>
+            </div>
 
+            {/* ── Mobile Card List ────────────────────────────────────── */}
+            <div className="lg:hidden divide-y divide-border">
+              {pageItems.map((item) => (
+                <div key={item.id} className="p-4 space-y-2">
+                  {/* Name + Status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">
+                        {item.employee_name}
+                      </p>
+                      <p className="text-xs text-muted">
+                        <span title={item.leave_type_desc}>
+                          {item.leave_type}
+                        </span>
+                        {" \u00b7 "}
+                        {item.applied_date}
+                      </p>
+                      {renderDetails(item)}
+                    </div>
+                    <LeaveBadge status={item.status} />
+                  </div>
+
+                  {/* Key-value pairs */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div>
+                      <span className="text-muted">Days:</span>{" "}
+                      <span className="tabular-nums font-medium">
+                        {item.credits}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted">Bal. Before:</span>{" "}
+                      <span className="tabular-nums font-medium">
+                        {item.credit_balance_before != null
+                          ? item.credit_balance_before.toFixed(3)
+                          : "\u2014"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted">Pay:</span>{" "}
+                      <span className="tabular-nums font-medium">
+                        {item.pay_amount ? fmtPeso(item.pay_amount) : "\u2014"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted">Action Date:</span>{" "}
+                      <span className="font-medium">
+                        {item.approved_date ?? "\u2014"}
+                      </span>
+                    </div>
+                    {item.approved_by_name && (
+                      <div className="col-span-2">
+                        <span className="text-muted">Approved By:</span>{" "}
+                        <span className="font-medium">
+                          {item.approved_by_name}
+                        </span>
+                      </div>
+                    )}
+                    {item.remarks && (
+                      <div className="col-span-2">
+                        <span className="text-muted">Remarks:</span>{" "}
+                        <span className="font-medium">{item.remarks}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  {item.status === "pending" && (
+                    <div className="pt-1">{renderActions(item)}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <Pagination page={page} totalPages={totalPages} totalItems={totalItems} onPageChange={setPage} />
+          </>
+        )}
+      </Card>
+
+      {/* ── Dialogs (unchanged) ────────────────────────────────────────── */}
       <LeaveDialog
         open={showFileDialog}
         onClose={() => setShowFileDialog(false)}
@@ -317,7 +435,7 @@ const LeaveManagement = () => {
         open={showHolidayDialog}
         onClose={() => setShowHolidayDialog(false)}
       />
-    </div>
+    </PageShell>
   );
 };
 
