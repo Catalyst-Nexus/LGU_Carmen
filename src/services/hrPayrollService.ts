@@ -702,6 +702,110 @@ export const fetchPaySlipDetailForPDF = async (
 };
 
 // =============================================================================
+// Fetch pay slips linked to a specific payroll (for employee table + PDF)
+// =============================================================================
+
+export interface PayrollPaySlipRow {
+  id: string;
+  paySlipId: string;
+  employeeName: string;
+  employeeNo: string;
+  positionTitle: string;
+  officeName: string;
+  rate: number;
+  daysWorked: number;
+  basicPay: number;
+  grossAmount: number;
+  deductions: { code: string; label: string; amount: number }[];
+  totalDeductions: number;
+  netAmount: number;
+  status: string;
+}
+
+/**
+ * Fetch all pay slips linked to a payroll, with full employee & deduction details.
+ * Used both for the employee table UI and payroll register PDF regeneration.
+ */
+export const fetchPayrollPaySlips = async (
+  payrollId: string,
+): Promise<PayrollPaySlipRow[]> => {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const sb = supabase as NonNullable<typeof supabase>;
+
+  const { data: links, error: linkErr } = await sb
+    .schema("hr")
+    .from("payroll_pay_slips")
+    .select(
+      `pay_slip:pay_slip_id (
+        id, per_id, gross_amount, total_deductions, net_amount, status,
+        personnel:per_id (
+          first_name, last_name, employee_no,
+          position:pos_id ( description, salary_rate:sr_id ( rate:rate_id ( amount ) ) ),
+          office:o_id ( description )
+        ),
+        pay_slip_deductions (
+          amount,
+          deduction_type:deduction_type_id ( code, description )
+        ),
+        pay_slip_time_records ( time_record_id )
+      )`,
+    )
+    .eq("payroll_id", payrollId);
+
+  if (linkErr || !links) {
+    console.error("Error fetching payroll pay slips:", linkErr);
+    return [];
+  }
+
+  return (links as AnyJoin[]).map((link) => {
+    const slip = unwrap(link.pay_slip);
+    if (!slip) return null;
+
+    const person = unwrap(slip.personnel);
+    const pos = unwrap(person?.position);
+    const ofc = unwrap(person?.office);
+
+    let rate = 0;
+    if (pos?.salary_rate) {
+      const sr = unwrap(pos.salary_rate);
+      const r = unwrap(sr?.rate);
+      rate = Number(r?.amount) || 0;
+    }
+
+    const rawDeds = (slip.pay_slip_deductions ?? []) as AnyJoin[];
+    const deductions = rawDeds.map((d: AnyJoin) => {
+      const dt = unwrap(d.deduction_type);
+      return {
+        code: (dt?.code as string) ?? "",
+        label: (dt?.description as string) ?? "",
+        amount: Number(d.amount) || 0,
+      };
+    });
+
+    const trCount = (slip.pay_slip_time_records ?? []).length;
+
+    return {
+      id: slip.id as string,
+      paySlipId: slip.id as string,
+      employeeName: person
+        ? `${person.first_name} ${person.last_name}`.toUpperCase()
+        : "—",
+      employeeNo: person?.employee_no ?? "—",
+      positionTitle: pos?.description ?? "—",
+      officeName: ofc?.description ?? "—",
+      rate,
+      daysWorked: trCount,
+      basicPay: Number(slip.gross_amount) || 0,
+      grossAmount: Number(slip.gross_amount) || 0,
+      deductions,
+      totalDeductions: Number(slip.total_deductions) || 0,
+      netAmount: Number(slip.net_amount) || 0,
+      status: slip.status as string,
+    };
+  }).filter(Boolean) as PayrollPaySlipRow[];
+};
+
+// =============================================================================
 // Remittance
 // =============================================================================
 
