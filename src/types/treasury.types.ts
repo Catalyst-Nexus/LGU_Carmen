@@ -122,6 +122,7 @@ export interface TreasuryAccountCode {
   id: string;
   code: string;
   description: string;
+  category: string;
   fund_type: TreasuryFundType;
   is_active: boolean;
   created_at: string;
@@ -131,6 +132,7 @@ export interface TreasuryAccountCode {
 export interface CreateTreasuryAccountCodePayload {
   code: string;
   description: string;
+  category: string;
   fund_type: TreasuryFundType;
   is_active: boolean;
 }
@@ -138,6 +140,7 @@ export interface CreateTreasuryAccountCodePayload {
 export interface UpdateTreasuryAccountCodePayload {
   code?: string;
   description?: string;
+  category?: string;
   fund_type?: TreasuryFundType;
   is_active?: boolean;
 }

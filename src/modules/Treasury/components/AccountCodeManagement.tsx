@@ -31,6 +31,7 @@ export default function AccountCodeManagement({
 
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
   const [fundType, setFundType] = useState<TreasuryFundType>('General');
   const [isActive, setIsActive] = useState(true);
 
@@ -38,6 +39,7 @@ export default function AccountCodeManagement({
     setEditing(null);
     setCode('');
     setTitle('');
+    setCategory('');
     setFundType('General');
     setIsActive(true);
     setError('');
@@ -48,6 +50,7 @@ export default function AccountCodeManagement({
     setEditing(item);
     setCode(item.code);
     setTitle(item.description);
+    setCategory(item.category);
     setFundType(item.fund_type);
     setIsActive(item.is_active);
     setError('');
@@ -91,6 +94,7 @@ export default function AccountCodeManagement({
     const basePayload = {
       code: code.trim(),
       description: title.trim(),
+      category: category.trim(),
       fund_type: fundType,
       is_active: isActive,
     };
@@ -194,6 +198,7 @@ export default function AccountCodeManagement({
                 <th className={thCls}>#</th>
                 <th className={thCls}>Code</th>
                 <th className={thCls}>Account Title</th>
+                <th className={thCls}>Category</th>
                 <th className={thCls}>Fund Type</th>
                 <th className={thCls}>Status</th>
                 <th className={`${thCls} text-right`}>Actions</th>
@@ -202,13 +207,13 @@ export default function AccountCodeManagement({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
                     Loading account codes...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted py-8 border-b border-border/50">
+                  <td colSpan={7} className="text-center text-muted py-8 border-b border-border/50">
                     No account codes found.
                   </td>
                 </tr>
@@ -218,6 +223,7 @@ export default function AccountCodeManagement({
                     <td className={tdCls}>{index + 1}</td>
                     <td className={tdCls}>{item.code}</td>
                     <td className={tdCls}>{item.description}</td>
+                    <td className={tdCls}>{item.category}</td>
                     <td className={tdCls}>{item.fund_type}</td>
                     <td className={tdCls}>
                       <StatusBadge status={item.is_active ? 'active' : 'inactive'} />
@@ -271,6 +277,14 @@ export default function AccountCodeManagement({
             onChange={setTitle}
             placeholder="e.g., Real Property Tax"
             required
+          />
+
+          <FormInput
+            id="treasury-account-category"
+            label="Category"
+            value={category}
+            onChange={setCategory}
+            placeholder="e.g., Tax Revenue"
           />
 
           <div className="space-y-1.5">
